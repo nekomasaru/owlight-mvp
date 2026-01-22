@@ -1,20 +1,67 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { User } from '@/types';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 export default function EngagementPage() {
-    const [points, setPoints] = useState(10);
+    const [points, setPoints] = useState<number | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Static user data (name only, points managed by state)
+    // Static user data (name only)
     const user: Omit<User, 'points'> = {
         name: 'Taro',
     };
 
-    const handleThanks = () => {
-        setPoints(prev => prev + 1);
+    // Firestore Integration
+    useEffect(() => {
+        // Reference to the user document (using 'taro' as a fixed ID for this MVP)
+        const userDocRef = doc(db, 'users', 'taro');
+
+        // Real-time listener
+        const unsubscribe = onSnapshot(userDocRef, async (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                // If document exists, update state
+                const data = docSnapshot.data();
+                setPoints(data.points);
+                setIsLoading(false);
+            } else {
+                // If document doesn't exist, create it with initial data
+                try {
+                    await setDoc(userDocRef, {
+                        name: user.name,
+                        points: 10 // Initial points
+                    });
+                    // The snapshot listener will fire again after creation
+                } catch (error) {
+                    console.error("Error creating initial document:", error);
+                    setIsLoading(false);
+                }
+            }
+        }, (error) => {
+            console.error("Error fetching document:", error);
+            setIsLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+    }, []);
+
+    const handleThanks = async () => {
+        if (points === null) return;
+
+        try {
+            const userDocRef = doc(db, 'users', 'taro');
+            // Optimistic UI update could be done here, but for simplicity we rely on the snapshot listener
+            await updateDoc(userDocRef, {
+                points: points + 1
+            });
+        } catch (error) {
+            console.error("Error updating points:", error);
+        }
     };
 
     return (
@@ -35,19 +82,29 @@ export default function EngagementPage() {
                     <div className="w-full grid grid-cols-1 gap-4">
                         <div className="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-100">
                             <p className="text-sm font-medium text-indigo-600 mb-1">Current Points</p>
-                            <p className="text-4xl font-extrabold text-indigo-700">{points}</p>
+                            <p className="text-4xl font-extrabold text-indigo-700">
+                                {isLoading ? (
+                                    <span className="animate-pulse inline-block w-16 h-8 bg-indigo-200 rounded"></span>
+                                ) : (
+                                    points
+                                )}
+                            </p>
                         </div>
                     </div>
 
                     <div className="w-full flex justify-center pt-2">
-                        <Button onClick={handleThanks} className="w-full sm:w-auto min-w-[120px]">
+                        <Button
+                            onClick={handleThanks}
+                            disabled={isLoading}
+                            className="w-full sm:w-auto min-w-[120px]"
+                        >
                             感謝する
                         </Button>
                     </div>
 
                     <div className="w-full pt-4 border-t border-gray-100">
                         <p className="text-xs text-center text-gray-400">
-                            Last updated: Just now
+                            Synced with Firestore
                         </p>
                     </div>
                 </div>
