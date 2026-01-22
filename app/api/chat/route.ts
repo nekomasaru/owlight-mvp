@@ -1,10 +1,12 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { GoogleAIFileManager } from "@google/generative-ai/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const apiKey = process.env.GEMINI_API_KEY || "";
+const genAI = new GoogleGenerativeAI(apiKey);
+const fileManager = new GoogleAIFileManager(apiKey);
 
-// Uploaded File URI (managed manually for MVP)
-// 庁内DXガイドラインv1
-const MANUAL_FILE_URI = "https://generativelanguage.googleapis.com/v1beta/files/tgzv6jannnt7";
+// モデルは gemini-2.5-flash（thinking は未使用）
+const modelName = "gemini-2.5-flash";
 
 // In-memory rate limiter
 const requestsMap = new Map<string, number[]>();
@@ -52,52 +54,106 @@ export async function POST(req: Request) {
 
         // Logging variables
         const start = Date.now();
-        const modelName = "gemini-2.0-flash";
         let responseText = "";
         let success = false;
         let errorMessage: string | null = null;
+        let fileUrisLog = [];
 
         try {
             // 3. Configure Model
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                generationConfig: {
-                    maxOutputTokens: 1024, // ドキュメント参照のため少し長めに確保
-                    temperature: 0.2,      // 事実に基づく回答のため低めに
-                }
             });
 
-            // 4. Construct Contents with File API
-            // 会話の最初に、「ファイルを参照せよ」という指示と共に File Data を渡す
-            const systemPart = {
-                text: "あなたは自治体の有能なアシスタントです。添付の「庁内DXガイドライン」およびその他の資料に基づいて、ユーザーの質問に日本語で丁寧に回答してください。資料にない情報については推測せず、「資料には記載がありません」と答えてください。"
+            // 4. Retrieve Active Files from Google File API
+            const listFilesResponse = await fileManager.listFiles();
+
+            // 状態別に分類
+            const SUPPORTED_MIME_TYPES = [
+                'text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json', 'text/csv', 'text/markdown',
+                'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+                'application/pdf'
+            ];
+
+            const activeFiles = listFilesResponse.files.filter(f =>
+                f.state === "ACTIVE" &&
+                // Office系などが混入していた場合、APIエラーになるため除外する
+                // (新規アップロード分は text/plain に変換されているが、過去分対策)
+                !f.mimeType.includes('officedocument') &&
+                !f.mimeType.includes('wordprocessingml') &&
+                !f.mimeType.includes('spreadsheetml')
+            );
+            const processingFiles = listFilesResponse.files.filter(f => f.state === "PROCESSING");
+            const failedFiles = listFilesResponse.files.filter(f => f.state === "FAILED");
+
+            // ログ用に記録
+            console.log("[RAG Update] Files Status:", {
+                active: activeFiles.length,
+                processing: processingFiles.length,
+                failed: failedFiles.length
+            });
+
+            // もし処理中のファイルがあり、かつ有効なファイルが1つもない場合は、ユーザーに待ってもらう
+            if (activeFiles.length === 0 && processingFiles.length > 0) {
+                return new Response(JSON.stringify({
+                    reply: "申し訳ありません。現在、アップロードされた資料をAIが読み込んでいる最中です（処理中）。\n数秒〜1分ほど待ってから、もう一度話しかけてください。🦉"
+                }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+
+            // ログ用にファイル名を記録
+            fileUrisLog = activeFiles.map(f => f.displayName || f.name);
+
+            // 5. Construct Contents
+            // システムプロンプトを明示的に設定
+            const systemInstruction = {
+                role: "system",
+                parts: [
+                    { text: "あなたは自治体の有能なアシスタントです。添付の資料群に基づいて、ユーザーの質問に日本語で丁寧に回答してください。資料にない情報については推測せず、「資料には記載がありません」と答えてください。" + (activeFiles.length === 0 ? "\n\n現在、参照できる資料（RAG）はありません。一般的な知識で回答してください。" : "") }
+                ]
             };
 
-            const filePart = {
-                fileData: {
-                    mimeType: "text/plain",
-                    fileUri: MANUAL_FILE_URI
-                }
-            };
+            // ファイルデータを含むメッセージ部分
+            const fileParts: Part[] = [];
+            for (const file of activeFiles) {
+                fileParts.push({
+                    fileData: {
+                        mimeType: file.mimeType,
+                        fileUri: file.uri
+                    }
+                });
+            }
 
-            // 最初のメッセージ（システム指示相当）
-            const systemMessage = {
-                role: "user",
-                parts: [filePart, systemPart]
-            };
-
-            // ユーザーの会話履歴
+            // 履歴の構築
             const historyContents = messages.map((m) => ({
                 role: m.role === "assistant" ? "model" : "user",
-                parts: [{ text: m.content }],
+                parts: [{ text: m.content } as Part],
             }));
 
-            // 結合
-            const contents = [systemMessage, ...historyContents];
+            // ファイルがある場合、履歴の先頭（最初のユーザー発言）に統合するか、独立したコンテキストとして挿入する。
+            let contents = [...historyContents];
 
-            // 5. Generate Content
+            if (fileParts.length > 0) {
+                const fileContextMessage = {
+                    role: "user",
+                    parts: [...fileParts, { text: "これらの資料を参照して、以下の質問に答えてください。" } as Part]
+                };
+                // 先頭に追加
+                contents = [fileContextMessage, ...historyContents];
+            }
+
+            // 6. Generate Content
             const result = await model.generateContent({
                 contents,
+                systemInstruction,
+                generationConfig: {
+                    maxOutputTokens: 1024,
+                    temperature: 0.2,
+                    topP: 0.95,
+                    topK: 40,
+                }
             });
 
             const response = await result.response;
@@ -128,7 +184,9 @@ export async function POST(req: Request) {
                 durationMs,
                 success,
                 errorMessage,
-                ragType: "google-file-api" // RAGの種類をログに記録
+                ragType: "google-file-api-dynamic",
+                fileCount: fileUrisLog.length,
+                thinking: "disabled"
             };
             console.log("[LLM_LOG]", JSON.stringify(logObject));
         }
