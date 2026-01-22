@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ChatBubble } from '@/components/ui/ChatBubble';
 import { Message } from '@/types';
+
+const STORAGE_KEY = 'owlight_chat_messages';
 
 export default function ChatPage() {
   const [input, setInput] = useState('');
@@ -12,6 +14,30 @@ export default function ChatPage() {
     { id: '1', role: 'assistant', content: 'こんにちは！AIアシスタントです。何かお話ししましょう！' }
   ]);
   const [isSending, setIsSending] = useState(false);
+  const isLoaded = useRef(false);
+
+  // 会話履歴の復元 (マウント時)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMessages = localStorage.getItem(STORAGE_KEY);
+      if (savedMessages) {
+        try {
+          setMessages(JSON.parse(savedMessages));
+        } catch (e) {
+          console.error("Failed to parse chat history:", e);
+        }
+      }
+      isLoaded.current = true;
+    }
+  }, []);
+
+  // 会話履歴の保存 (更新時)
+  useEffect(() => {
+    if (isLoaded.current && typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    }
+  }, [messages]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +49,10 @@ export default function ChatPage() {
       content: input,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    // 新しい履歴配列を作成 (これをそのままステート更新とAPI送信に使う)
+    const newHistory = [...messages, userMessage];
+
+    setMessages(newHistory);
     setInput('');
     setIsSending(true);
 
@@ -33,7 +62,8 @@ export default function ChatPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: input }),
+        // メッセージ履歴全体を送信
+        body: JSON.stringify({ messages: newHistory }),
       });
 
       if (!response.ok) {
