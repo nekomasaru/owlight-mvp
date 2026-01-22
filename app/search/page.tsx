@@ -87,14 +87,14 @@ export default function SearchPage() {
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="font-bold text-taupe text-lg tracking-tight">OWLight</span>
-                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">Knowledge</span>
+                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">ナレッジ検索</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">
                             <ArrowLeft size={14} className="mr-2" />
-                            Back to Chat
+                            チャットに戻る
                         </Button>
                     </Link>
                 </div>
@@ -108,9 +108,9 @@ export default function SearchPage() {
                         <Database size={40} strokeWidth={1.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">Evidence Search</h1>
+                        <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">エビデンス検索</h1>
                         <p className="text-taupe-light text-sm max-w-md mx-auto leading-relaxed">
-                            Search through all verified documents, internal rules, and official guidelines.
+                            公式ドキュメント、社内ルール、ガイドラインなどの信頼できる情報源から検索します。
                         </p>
                     </div>
 
@@ -122,7 +122,7 @@ export default function SearchPage() {
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Enter keywords (e.g. Remote work, Security rules)..."
+                            placeholder="キーワードを入力 (例: テレワーク規定, セキュリティルール)..."
                             className="w-full h-16 pl-14 pr-32 rounded-2xl border border-slate-200 bg-white text-base text-taupe placeholder:text-slate-300 focus:outline-none focus:ring-8 focus:ring-terracotta/5 focus:border-terracotta shadow-md transition-all font-medium"
                             disabled={isLoading}
                         />
@@ -132,7 +132,8 @@ export default function SearchPage() {
                                 className="h-10 px-6 rounded-xl font-bold"
                                 disabled={isLoading || !query.trim()}
                             >
-                                {isLoading ? "Searching..." : "Search"}
+                            >
+                                {isLoading ? "検索中..." : "検索"}
                             </Button>
                         </div>
                     </form>
@@ -151,7 +152,7 @@ export default function SearchPage() {
                         <div className="flex items-center justify-between px-2">
                             <h2 className="text-sm font-bold text-taupe uppercase tracking-widest flex items-center gap-2">
                                 <Sparkles size={16} className="text-terracotta" />
-                                Matches Found ({results.length})
+                                検索結果 ({results.length}件)
                             </h2>
                         </div>
                     )}

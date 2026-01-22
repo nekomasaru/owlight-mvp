@@ -140,7 +140,7 @@ export default function FileAdminPage() {
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">
                             <ArrowLeft size={14} className="mr-2" />
-                            Back to Chat
+                            チャットに戻る
                         </Button>
                     </Link>
                 </div>
@@ -151,8 +151,8 @@ export default function FileAdminPage() {
                 {/* Page Hero */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-taupe tracking-tight mb-1 font-display">Archive</h1>
-                        <p className="text-taupe-light text-sm font-medium">Manage and organize your RAG source documents.</p>
+                        <h1 className="text-3xl font-bold text-taupe tracking-tight mb-1 font-display">ファイル管理</h1>
+                        <p className="text-taupe-light text-sm font-medium">RAG（検索拡張生成）で使用されるナレッジベースを管理します。</p>
                     </div>
                 </div>
 
@@ -164,7 +164,7 @@ export default function FileAdminPage() {
                         <Card className="p-6 sticky top-24">
                             <h3 className="text-sm font-bold text-taupe uppercase tracking-wider mb-4 flex items-center">
                                 <UploadCloud size={16} className="mr-2 text-terracotta" />
-                                Quick Upload
+                                クイックアップロード
                             </h3>
                             <div
                                 className={`
@@ -179,16 +179,16 @@ export default function FileAdminPage() {
                                         <UploadCloud size={24} className={dragActive ? 'text-terracotta' : 'text-slate-400'} />
                                     </div>
                                     <p className="text-sm font-bold text-taupe mb-1">
-                                        {isUploading ? "Uploading..." : "Drop file here"}
+                                        {isUploading ? "アップロード中..." : "ここにファイルをドロップ"}
                                     </p>
                                     <p className="text-xs text-taupe-light mb-4 text-center">
-                                        PDF, Word, Excel, or Markdown
+                                        PDF, Word, Excel, Markdown
                                     </p>
 
                                     {!isUploading && (
                                         <label className="w-full">
                                             <Button variant="secondary" className="w-full text-xs">
-                                                Browse Files
+                                                ファイルを選択
                                             </Button>
                                             <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])} accept=".md,.txt,.pdf,.docx,.xlsx" />
                                         </label>
@@ -211,7 +211,7 @@ export default function FileAdminPage() {
                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input
                                     type="text"
-                                    placeholder="Filter files..."
+                                    placeholder="ファイルをフィルタ..."
                                     className="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-9 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-terracotta/10 focus:border-terracotta transition-all"
                                 />
                             </div>
@@ -224,14 +224,14 @@ export default function FileAdminPage() {
                             {isLoading && files.length === 0 ? (
                                 <div className="p-20 text-center text-slate-300">
                                     <div className="animate-spin h-6 w-6 border-2 border-slate-200 border-t-terracotta rounded-full mx-auto mb-4"></div>
-                                    <p className="text-xs font-medium">Loading repository...</p>
+                                    <p className="text-xs font-medium">読み込み中...</p>
                                 </div>
                             ) : files.length === 0 ? (
                                 <div className="p-20 text-center text-slate-300 flex flex-col items-center">
                                     <div className="p-4 bg-slate-50 rounded-full mb-4">
                                         <FileIcon size={32} strokeWidth={1} />
                                     </div>
-                                    <p className="text-xs font-medium">No files uploaded yet.</p>
+                                    <p className="text-xs font-medium">ファイルが見つかりません。</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-100">
@@ -248,7 +248,7 @@ export default function FileAdminPage() {
                                                     <div className="flex items-center gap-3 mt-0.5 text-[10px] font-bold tracking-tight uppercase">
                                                         <span className={`flex items-center gap-1 ${file.state === 'ACTIVE' ? 'text-sage' : 'text-amber-500'}`}>
                                                             {file.state === 'ACTIVE' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
-                                                            {file.state}
+                                                            {file.state === 'ACTIVE' ? '利用可能' : '処理中'}
                                                         </span>
                                                         <span className="text-slate-300">•</span>
                                                         <span className="text-slate-400">{(parseInt(file.sizeBytes) / 1024).toFixed(1)} KB</span>

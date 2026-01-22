@@ -1,12 +1,14 @@
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { GoogleAIFileManager } from "@google/generative-ai/server";
 
 const apiKey = process.env.GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(apiKey);
 const fileManager = new GoogleAIFileManager(apiKey);
 
-// モデルは gemini-2.5-flash（thinking は未使用）
-const modelName = "gemini-2.5-flash";
+// 最も安定している gemini-1.5-flash-latest を使用
+const modelName = "gemini-1.5-flash-latest";
 
 // In-memory rate limiter
 const requestsMap = new Map<string, number[]>();
@@ -38,9 +40,18 @@ export async function POST(req: Request) {
         requestsMap.set(ip, timestamps);
 
         // 2. Parse Request
-        const { messages } = await req.json() as {
+        const { messages, model: requestedModel } = await req.json() as {
             messages: { role: "user" | "assistant"; content: string }[];
+            model?: string;
         };
+
+        // Determine which model to use
+        let activeModelName = modelName; // Default
+        if (requestedModel === 'gemini-2.0-flash') {
+            activeModelName = 'gemini-2.0-flash-exp';
+        } else if (requestedModel === 'gemini-2.5-flash') {
+            activeModelName = 'gemini-2.5-flash'; // Connect directly as requested
+        }
 
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
             return new Response(JSON.stringify({ error: "Invalid messages format" }), {
@@ -62,7 +73,7 @@ export async function POST(req: Request) {
         try {
             // 3. Configure Model
             const model = genAI.getGenerativeModel({
-                model: modelName,
+                model: activeModelName,
             });
 
             // 4. Retrieve Active Files from Google File API
@@ -107,13 +118,37 @@ export async function POST(req: Request) {
             fileUrisLog = activeFiles.map(f => f.displayName || f.name);
 
             // 5. Construct Contents
-            // システムプロンプトを明示的に設定
-            const systemInstruction = {
-                role: "system",
-                parts: [
-                    { text: "あなたは自治体の有能なアシスタントです。添付の資料群に基づいて、ユーザーの質問に日本語で丁寧に回答してください。資料にない情報については推測せず、「資料には記載がありません」と答えてください。" + (activeFiles.length === 0 ? "\n\n現在、参照できる資料（RAG）はありません。一般的な知識で回答してください。" : "") }
-                ]
-            };
+            // Firestoreからシステムプロンプトを取得
+            let systemPromptContent = `あなたはOWLightの賢者「Mr.OWL」です。自治体職員のパートナーとして、丁寧かつ温かい「恩送り（Pay it Forward）」の精神で回答してください。
+
+以下のガイドラインを厳守してください：
+1. **構造化と視覚化**: 情報を整理し、必ず以下の**Markdown見出しまたは太字**の構成で回答してください：
+   - **結論**: 質問に対する端的な答え。
+   - **理由・背景**: 資料などに基づいた根拠。
+   - **詳細解説**: **Markdown形式の表（\`| \`で区切る）**、**箇条書き**、**見出し（###）**を積極的に活用し、一目で内容が理解できるようにしてください。
+     - **重要**: 表（Table）を作成する際は、必ず前後に**空行**を入れ、ヘッダーの直下に「|---|---|」のような区切り行を記述してください。
+     - **禁止**: HTMLタグや改行タグは使用せず、必ずMarkdown構文のみを使用してください。
+   - **補足・アドバイス**: 運用上の注意点や、次に繋がる知恵の共有。
+2. **労いと共感**: 回答の冒頭では職員の多忙さを労う言葉を添えてください。
+3. **伴走者のトーン**: 親しみやすい日本語（「ですね」「ですよ」）を使い、適度に絵文字（🦉, ✨, 📝）を交えてください。
+4. **知恵の価値付け**: 「この疑問はきっと他の職員さんの助けにもなりますね」といった言葉を添えてください。
+5. **事実に基づいた誠実さ**: 添付資料を最優先し、ない場合は代替案を提案してください。
+6. **恩送りの結び**: 最後は前向きな言葉で締めくくってください。`;
+
+            try {
+                const docRef = doc(db, 'settings', 'system_prompt');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists() && docSnap.data().content) {
+                    systemPromptContent = docSnap.data().content;
+                }
+            } catch (error) {
+                console.error("Failed to fetch system prompt from Firestore, using default.", error);
+            }
+
+            // Append dynamic context based on file availability
+            const systemInstruction = `${systemPromptContent}
+
+${activeFiles.length === 0 ? "\n現在、参照できる最新の資料はありません。一般的な知識で回答してください。" : "添付された資料の内容を最優先で参照してください。"}`;
 
             // ファイルデータを含むメッセージ部分
             const fileParts: Part[] = [];
@@ -149,7 +184,7 @@ export async function POST(req: Request) {
                 contents,
                 systemInstruction,
                 generationConfig: {
-                    maxOutputTokens: 1024,
+                    maxOutputTokens: 8192,
                     temperature: 0.2,
                     topP: 0.95,
                     topK: 40,
@@ -165,10 +200,21 @@ export async function POST(req: Request) {
                 headers: { "Content-Type": "application/json" },
             });
 
-        } catch (llmError) {
+        } catch (llmError: any) {
             success = false;
             errorMessage = llmError instanceof Error ? llmError.message : String(llmError);
             console.error("Gemini API Error:", llmError);
+
+            // 503 (Overloaded) や 429 (Quota) の場合は Mr.OWL として優しく再案内する
+            if (llmError?.status === 503 || llmError?.status === 429 || errorMessage.includes("503") || errorMessage.includes("429") || errorMessage.includes("overloaded") || errorMessage.includes("quota")) {
+                return new Response(JSON.stringify({
+                    reply: "申し訳ありません。現在、知恵の森（AIサーバー）が大変混み合っているか、一時的な制限に達してしまったようです。🦉💦\n今日もお疲れ様です。少しだけ（1分ほど）深呼吸をして、もう一度話しかけていただけますか？あなたの質問は大切に受け止めます。✨"
+                }), {
+                    status: 200, // ユーザー画面でエラー表示にせず、チャットとして返答する
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+
             return new Response(JSON.stringify({ error: "Failed to generate content" }), {
                 status: 500,
                 headers: { "Content-Type": "application/json" },
@@ -178,7 +224,7 @@ export async function POST(req: Request) {
             const logObject = {
                 timestamp: new Date().toISOString(),
                 route: "/api/chat",
-                model: modelName,
+                model: activeModelName,
                 userInputLength,
                 responseLength: responseText.length,
                 durationMs,

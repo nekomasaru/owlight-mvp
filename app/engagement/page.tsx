@@ -94,14 +94,14 @@ export default function EngagementPage() {
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="font-bold text-taupe text-lg tracking-tight">OWLight</span>
-                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">Profile</span>
+                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">プロフィール</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">
                             <ArrowLeft size={14} className="mr-2" />
-                            Chat
+                            チャットに戻る
                         </Button>
                     </Link>
                 </div>
@@ -126,7 +126,7 @@ export default function EngagementPage() {
                             </div>
 
                             <h2 className="text-xl font-bold text-taupe mb-1">{user.name}</h2>
-                            <p className="text-taupe-light text-xs font-bold uppercase tracking-widest mb-4">Central Admin Office</p>
+                            <p className="text-taupe-light text-xs font-bold uppercase tracking-widest mb-4">総務部 / 管理課</p>
 
                             <div className={`px-4 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${level.bg} ${level.color} border border-current/10`}>
                                 {level.label}
@@ -136,12 +136,12 @@ export default function EngagementPage() {
                         <Card className="p-6">
                             <h3 className="text-xs font-bold text-taupe uppercase tracking-wider mb-4 flex items-center">
                                 <Info size={14} className="mr-2 text-slate-400" />
-                                Growth Status
+                                成長ステータス
                             </h3>
                             <div className="space-y-4">
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-[10px] font-bold text-taupe-light uppercase tracking-tighter">
-                                        <span>Evolution Progress</span>
+                                        <span>進化の過程</span>
                                         <span>{points || 0} / 50 PT</span>
                                     </div>
                                     <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -152,7 +152,7 @@ export default function EngagementPage() {
                                     </div>
                                 </div>
                                 <p className="text-[10px] text-taupe-light leading-relaxed italic">
-                                    "Continue contributing documents and engaging in chat to evolve your owl."
+                                    "ドキュメントの登録やチャットでの活動を続けて、フクロウを進化させましょう。"
                                 </p>
                             </div>
                         </Card>
@@ -161,17 +161,17 @@ export default function EngagementPage() {
                     {/* Right Column: Stats & Actions */}
                     <div className="md:col-span-2 space-y-8">
                         <div>
-                            <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">Engagement</h1>
-                            <p className="text-taupe-light text-sm font-medium">Your contribution to the institutional knowledge pool.</p>
+                            <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">エンゲージメント</h1>
+                            <p className="text-taupe-light text-sm font-medium">組織のナレッジ蓄積への貢献度と成長記録。</p>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Card className="p-6 border-sage/20 bg-sage/5">
                                 <div className="flex justify-between items-start mb-2 text-sage">
                                     <TrendingUp size={20} />
-                                    <span className="text-[10px] font-bold tracking-widest uppercase">+12% vs last week</span>
+                                    <span className="text-[10px] font-bold tracking-widest uppercase">先週比 +12%</span>
                                 </div>
-                                <p className="text-xs font-bold text-sage-light uppercase tracking-widest mb-1">Knowledge Points</p>
+                                <p className="text-xs font-bold text-sage-light uppercase tracking-widest mb-1">ナレッジポイント</p>
                                 <p className="text-4xl font-black text-sage tracking-tighter">
                                     {isLoading ? '...' : points}
                                 </p>
@@ -181,7 +181,7 @@ export default function EngagementPage() {
                                 <div className="flex justify-between items-start mb-2 text-terracotta">
                                     <Zap size={20} />
                                 </div>
-                                <p className="text-xs font-bold text-taupe-light uppercase tracking-widest mb-1">Weekly Rank</p>
+                                <p className="text-xs font-bold text-taupe-light uppercase tracking-widest mb-1">今週のランク</p>
                                 <p className="text-4xl font-black text-taupe tracking-tighter">#04</p>
                             </Card>
                         </div>
@@ -192,9 +192,9 @@ export default function EngagementPage() {
                                     <Heart size={32} />
                                 </div>
                                 <div className="text-center max-w-xs">
-                                    <h3 className="font-bold text-lg text-taupe mb-2">Cycle of Thanks</h3>
+                                    <h3 className="font-bold text-lg text-taupe mb-2">感謝のサイクル</h3>
                                     <p className="text-sm text-taupe-light leading-relaxed">
-                                        Send appreciation to the community or AI for helpful support.
+                                        コミュニティやAIのサポートに感謝を伝えましょう。
                                     </p>
                                 </div>
                                 <Button
@@ -203,10 +203,10 @@ export default function EngagementPage() {
                                     disabled={isLoading}
                                 >
                                     <Heart size={16} className="mr-2 fill-current" />
-                                    Send Appreciation
+                                    感謝を送る
                                 </Button>
                                 <p className="text-[10px] text-slate-300 font-medium">
-                                    Synced with Firebase Realtime Support.
+                                    Firebase Realtime Supportと連携中
                                 </p>
                             </div>
                         </Card>
