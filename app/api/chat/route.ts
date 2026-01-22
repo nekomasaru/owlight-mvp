@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { GoogleAIFileManager } from "@google/generative-ai/server";
 
 const apiKey = process.env.GEMINI_API_KEY || "";
@@ -19,13 +19,13 @@ export async function POST(req: Request) {
         const ip = req.headers.get("x-forwarded-for") ?? "unknown";
         const now = Date.now();
         const windowMs = 60_000;
-        const limit = 5;
+        const rateLimit = 5;
 
         const timestamps = (requestsMap.get(ip) ?? []).filter(
             (t) => now - t < windowMs
         );
 
-        if (timestamps.length >= limit) {
+        if (timestamps.length >= rateLimit) {
             return new Response(
                 JSON.stringify({
                     error: "短時間にアクセスが集中しています。しばらく時間をおいて再度お試しください。",
@@ -145,8 +145,24 @@ export async function POST(req: Request) {
                 console.error("Failed to fetch system prompt from Firestore, using default.", error);
             }
 
+            // --- Knowledge RAG: High Points ---
+            let knowledgeContext = "";
+            try {
+                const q = query(collection(db, 'knowledge'), orderBy('points', 'desc'), limit(5));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    const list = snap.docs.map(d => {
+                        const data = d.data();
+                        return `- [信頼度:${data.points}pt] ${data.content} (判断:${data.tags?.join(', ') || 'なし'})`;
+                    }).join('\n');
+                    knowledgeContext = `\n\n### 庁内の共有ナレッジ (現場の知恵)\n以下の情報は、現場職員によって高く評価された重要な知恵です。回答にあたっては、この内容を最優先の指針として参照・引用してください：\n${list}`;
+                }
+            } catch (e) {
+                console.error("Knowledge RAG failed:", e);
+            }
+
             // Append dynamic context based on file availability
-            const systemInstruction = `${systemPromptContent}
+            const systemInstruction = `${systemPromptContent}${knowledgeContext}
 
 ${activeFiles.length === 0 ? "\n現在、参照できる最新の資料はありません。一般的な知識で回答してください。" : "添付された資料の内容を最優先で参照してください。"}`;
 

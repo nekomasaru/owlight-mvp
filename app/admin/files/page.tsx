@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import UserSwitcher from '@/components/UserSwitcher'; // Added
 import {
     FileText,
     Trash2,
@@ -137,6 +138,7 @@ export default function FileAdminPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <UserSwitcher />
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">
                             <ArrowLeft size={14} className="mr-2" />

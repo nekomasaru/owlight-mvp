@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Beyond the Manual.",
 };
 
+import { UserProvider } from "@/contexts/UserContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,7 +28,9 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className={`${inter.variable} ${notoSansJP.variable} ${outfit.variable} font-sans antialiased min-h-screen bg-slate-50`}>
-        {children}
+        <UserProvider>
+          {children}
+        </UserProvider>
       </body>
     </html>
   );

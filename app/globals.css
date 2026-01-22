@@ -2,63 +2,52 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  /* shadcn/ui inspired color palette adjustments if needed */
-  --font-sans: var(--font-inter), sans-serif;
-  --font-display: var(--font-inter), sans-serif;
+  /* Premium Typography Tokens */
+  --font-sans: 'Inter', 'Noto Sans JP', sans-serif;
+  --font-display: 'Inter', 'Noto Sans JP', sans-serif;
 
-  /* OWLight Brand Colors */
-  --color-cream: #FAF9F7;
-  --color-warm-beige: #E8E4DF;
-  --color-warm-beige-dark: #D9D4CD;
-  --color-taupe: #5D5C5A;
-  --color-taupe-light: #7A7875;
-  --color-terracotta: #C67B5C;
-  --color-terracotta-light: #E8A082;
-  --color-sage: #9CAF88;
-  --color-sage-light: #B8C9A8;
-  --color-amber: #C9A66B;
-  --color-gold: #FFD700;
+  /* OWLight Premium Palette */
+  --color-cream: #FDFBF7;
+  --color-warm-beige: #EFEBE7;
+  --color-taupe: #3D3B39;
+  /* Deepen for better contrast */
+  --color-taupe-light: #8A8885;
+  --color-terracotta: #B35E3F;
+  /* More saturated, high-end terracotta */
+  --color-terracotta-light: #D98C6F;
+  --color-sage: #8DA677;
+  /* Softer sage */
+  --color-sage-light: #B5C9A3;
+  --color-amber: #B38E4D;
+  --color-gold: #D4AF37;
+  /* Metallic Gold */
 }
 
 :root {
-  /* Minimal SaaS Base Colors */
-  --background: #f8fafc;
-  /* slate-50 */
-  --foreground: #0f172a;
-  /* slate-900 */
+  /* Base Surface */
+  --background: #FBFAFA;
+  --foreground: #1A1919;
 
-  --card: #ffffff;
-  --card-foreground: #0f172a;
+  /* Card & Glass */
+  --card: #FFFFFF;
+  --card-foreground: #1A1919;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
 
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  /* Primary Action */
+  --primary: #B35E3F;
+  /* Use Terracotta as primary */
+  --primary-foreground: #FFFFFF;
 
-  --primary: #0f172a;
-  /* slate-900 */
-  --primary-foreground: #f8fafc;
-  /* slate-50 */
+  /* Muted & Accents */
+  --muted: #F4F3F2;
+  --muted-foreground: #6B6865;
+  --border: #E8E5E2;
+  --input: #E8E5E2;
 
-  --secondary: #f1f5f9;
-  /* slate-100 */
-  --secondary-foreground: #0f172a;
-
-  --muted: #f1f5f9;
-  /* slate-100 */
-  --muted-foreground: #64748b;
-  /* slate-500 */
-
-  --accent: #f1f5f9;
-  /* slate-100 */
-  --accent-foreground: #0f172a;
-
-  --destructive: #ef4444;
-  /* red-500 */
-  --destructive-foreground: #f8fafc;
-
-  --border: #e2e8f0;
-  /* slate-200 */
-  --input: #e2e8f0;
-  --ring: #0f172a;
+  /* Shadows */
+  --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.05), 0 4px 10px -5px rgba(0, 0, 0, 0.03);
+  --shadow-glow: 0 0 20px rgba(179, 94, 63, 0.2);
 }
 
 body {

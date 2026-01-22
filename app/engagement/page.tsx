@@ -1,220 +1,280 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { useUser } from '@/contexts/UserContext';
+import UserSwitcher from '@/components/UserSwitcher'; // Added // Added
 import {
     ArrowLeft,
-    User as UserIcon,
-    Award,
-    Heart,
     TrendingUp,
     Zap,
-    Info
+    Heart,
+    Trophy,
+    Clock,
+    Users,
+    Activity,
+    ChevronRight,
+    MessageCircle,
+    ShieldCheck,
+    HelpCircle,
+    LogOut
 } from 'lucide-react';
 
-// --- Simple Components (Consistent with Chat/Admin/Search Pages) ---
-
-const Button = ({ children, variant = "primary", className = "", ...props }: any) => {
-    const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 shadow-sm active:scale-95";
-    const variants = {
-        primary: "bg-terracotta text-white hover:bg-terracotta/90",
-        secondary: "bg-white text-taupe border border-slate-200 hover:bg-slate-50 hover:text-terracotta",
-        ghost: "hover:bg-slate-100 text-taupe-light hover:text-terracotta shadow-none",
-        outline: "border border-slate-200 bg-transparent hover:bg-slate-100 text-taupe shadow-none"
-    };
-    return (
-        <button className={`${baseStyle} ${variants[variant as keyof typeof variants]} ${className}`} {...props}>
-            {children}
-        </button>
-    );
-};
-
-const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-    <div className={`rounded-xl border border-slate-200 bg-white text-taupe shadow-sm ${className}`}>
+// --- Premium Component ---
+const PremiumCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
+    <div className={`bg-white rounded-3xl shadow-premium border border-white/50 p-8 ${className}`}>
         {children}
     </div>
 );
 
+// --- Engagement Page ---
 export default function EngagementPage() {
-    const [points, setPoints] = useState<number | null>(null);
+    const { user } = useUser(); // Use Context
+    const [points, setPoints] = useState<number>(0);
+    const [timeSaved, setTimeSaved] = useState<number>(0);
+    const [thanksCount, setThanksCount] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(true);
 
-    const user = { name: 'Taro' };
+    // const user = { name: 'Taro', dept: '市民生活部 / 市民課' }; // Removed hardcoded
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
+    // --- Firebase Sync ---
     useEffect(() => {
-        const userDocRef = doc(db, 'users', 'taro');
-        const unsubscribe = onSnapshot(userDocRef, async (docSnapshot) => {
+        const userDocRef = doc(db, 'users', user.id); // Dynamic ID
+        const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
-                setPoints(data.points);
+                setPoints(data.points || 0);
+                setTimeSaved(Math.floor(((data.points || 0) * 15) / 60));
+                setThanksCount(data.thanksCount || 12);
+                setIsLoading(false);
                 setIsLoading(false);
             } else {
-                try {
-                    await setDoc(userDocRef, { name: user.name, points: 10 });
-                } catch (error) {
-                    console.error(error);
-                    setIsLoading(false);
-                }
+                setDoc(userDocRef, { name: user.name, points: user.points, thanksCount: 3 });
             }
-        }, (error) => {
-            console.error(error);
-            setIsLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [user.id]);
 
-    const handleThanks = async () => {
-        if (points === null) return;
-        try {
-            const userDocRef = doc(db, 'users', 'taro');
-            await updateDoc(userDocRef, { points: points + 1 });
-        } catch (error) {
-            console.error(error);
-        }
-    };
+    // --- Draw Network (Modern Minimal) ---
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = canvas.parentElement?.clientWidth || 300;
+        canvas.height = 240;
 
-    const getLevelInfo = (pts: number) => {
-        if (pts < 20) return { label: 'Seedling', color: 'text-slate-400', bg: 'bg-slate-200/20' };
-        if (pts < 50) return { label: 'Baby Owl', color: 'text-sage', bg: 'bg-sage/10' };
-        return { label: 'Wisdom Owl', color: 'text-terracotta', bg: 'bg-terracotta/10' };
-    };
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const center = { x: canvas.width / 2, y: canvas.height / 2 };
+        const others = [
+            { a: 0.1, r: 80 }, { a: 1.5, r: 90 }, { a: 3.2, r: 75 }, { a: 4.8, r: 85 }
+        ];
 
-    const level = points !== null ? getLevelInfo(points) : { label: 'Loading...', color: 'text-slate-300', bg: 'bg-slate-50' };
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(141, 166, 119, 0.2)';
+        others.forEach(o => {
+            const x = center.x + Math.cos(o.a) * o.r;
+            const y = center.y + Math.sin(o.a) * o.r;
+            ctx.beginPath();
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(141, 166, 119, 0.1)';
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#B35E3F';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = 'rgba(179, 94, 63, 0.4)';
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+    }, [isLoading]);
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+        <div className="min-h-screen bg-background text-taupe font-sans antialiased pb-20 overflow-x-hidden">
 
-            {/* Header */}
-            <header className="sticky top-0 z-10 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 h-14 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full border border-terracotta overflow-hidden shadow-sm">
-                        <img src="/Mr.OWL.jpg" alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-taupe text-lg tracking-tight">OWLight</span>
-                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">プロフィール</span>
+            {/* Nav */}
+            <header className="fixed top-0 z-40 w-full bg-white/70 backdrop-blur-xl border-b border-white/20 px-8 h-16 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Link href="/">
+                        <div className="p-2 hover:bg-taupe/5 rounded-2xl transition-all">
+                            <ArrowLeft size={18} />
+                        </div>
+                    </Link>
+                    <div className="flex flex-col">
+                        <h1 className="text-sm font-bold tracking-tight">ナレッジ活用分析</h1>
+                        <span className="text-[8px] font-black text-taupe-light/50 tracking-widest uppercase">所属: {user.department}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Link href="/">
-                        <Button variant="ghost" className="h-8 text-xs font-semibold">
-                            <ArrowLeft size={14} className="mr-2" />
-                            チャットに戻る
-                        </Button>
+
+                <div className="flex items-center gap-4">
+                    <UserSwitcher />
+                    <Link href="/closing">
+                        <button className="p-2 text-taupe-light hover:text-terracotta transition-colors" title="業務終了">
+                            <LogOut size={18} />
+                        </button>
                     </Link>
+                    <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-full shadow-premium border border-white">
+                        <img src="/Mr.OWL.jpg" className="w-6 h-6 rounded-full object-cover border border-terracotta" />
+                        <span className="text-[10px] font-black uppercase text-terracotta">2026年 登録</span>
+                    </div>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-4xl mx-auto w-full p-4 sm:p-6 lg:p-12 flex flex-col gap-10">
+            <main className="max-w-7xl mx-auto px-8 pt-24 space-y-12">
 
+                {/* --- 1. Abstract Wisdom Visualization --- */}
+                <section className="relative overflow-hidden bg-white rounded-[3rem] shadow-premium p-12 flex flex-col lg:flex-row items-center gap-16">
+                    <div className="absolute top-[-100px] right-[-100px] w-96 h-96 bg-sage/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+                    {/* The "Tree" (Abstract Motion) */}
+                    <div className="relative w-72 h-72 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-sage/5 rounded-full animate-pulse"></div>
+                        <div className="absolute inset-4 border border-sage/10 rounded-full"></div>
+                        <div className="absolute inset-12 border-2 border-sage/20 rounded-full animate-[spin_20s_linear_infinite]"></div>
+
+                        <div className="relative z-10 flex flex-col items-center">
+                            <div className="w-32 h-32 bg-gradient-to-br from-sage to-sage-light rounded-[3rem] rotate-45 flex items-center justify-center shadow-lg">
+                                <Activity size={50} className="text-white -rotate-45" />
+                            </div>
+                            <div className="mt-8 text-center">
+                                <span className="block text-[10px] font-black text-sage uppercase tracking-[0.3em]">循環健全度</span>
+                                <span className="text-3xl font-thin tracking-tighter">98.4%</span>
+                            </div>
+                        </div>
+
+                        {/* Orbiting particles */}
+                        <div className="absolute top-0 left-1/2 w-4 h-4 bg-terracotta/40 rounded-full shadow-glow"></div>
+                        <div className="absolute bottom-10 right-4 w-3 h-3 bg-sage rounded-full"></div>
+                    </div>
+
+                    <div className="flex-1 space-y-8 text-center lg:text-left">
+                        <div className="space-y-4">
+                            <h2 className="text-4xl font-thin tracking-tight leading-tight">
+                                ナレッジの森は、現在<br />
+                                <span className="font-bold text-terracotta italic underline decoration-terracotta/20 underline-offset-8">最盛期</span>を迎えています。
+                            </h2>
+                            <p className="text-taupe-light text-sm max-w-lg leading-relaxed font-medium">
+                                素晴らしい成果です。あなたのこれまでの貢献により、市民課のナレッジ循環は理想的なサイクルに入っています。
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-4">
+                            <Link href="/">
+                                <button className="px-10 py-5 bg-gradient-to-tr from-terracotta to-terracotta-light text-white font-bold rounded-[2rem] shadow-glow hover:scale-105 transition-all active:scale-95 text-sm tracking-wide flex items-center gap-3">
+                                    <MessageCircle size={20} />
+                                    OWLくんと対話を始める
+                                </button>
+                            </Link>
+                            <button className="px-6 py-5 bg-taupe/5 hover:bg-taupe/10 text-taupe font-bold rounded-[2rem] transition-all text-[11px] uppercase tracking-widest">
+                                データを更新
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                {/* --- 2. Metrics Grid --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-
-                    {/* Left Column: Avatar & Basic Info */}
-                    <div className="md:col-span-1 space-y-6">
-                        <Card className="p-8 flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                                <div className="h-24 w-24 rounded-full border-4 border-white shadow-xl overflow-hidden ring-4 ring-slate-50">
-                                    <div className="h-full w-full bg-slate-100 flex items-center justify-center text-slate-400">
-                                        <UserIcon size={40} strokeWidth={1.5} />
-                                    </div>
-                                </div>
-                                <div className="absolute -bottom-2 -right-2 h-10 w-10 bg-white rounded-full border border-slate-100 shadow-md flex items-center justify-center text-amber-500">
-                                    <Award size={20} />
-                                </div>
-                            </div>
-
-                            <h2 className="text-xl font-bold text-taupe mb-1">{user.name}</h2>
-                            <p className="text-taupe-light text-xs font-bold uppercase tracking-widest mb-4">総務部 / 管理課</p>
-
-                            <div className={`px-4 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${level.bg} ${level.color} border border-current/10`}>
-                                {level.label}
-                            </div>
-                        </Card>
-
-                        <Card className="p-6">
-                            <h3 className="text-xs font-bold text-taupe uppercase tracking-wider mb-4 flex items-center">
-                                <Info size={14} className="mr-2 text-slate-400" />
-                                成長ステータス
-                            </h3>
-                            <div className="space-y-4">
-                                <div className="space-y-1">
-                                    <div className="flex justify-between text-[10px] font-bold text-taupe-light uppercase tracking-tighter">
-                                        <span>進化の過程</span>
-                                        <span>{points || 0} / 50 PT</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-terracotta transition-all duration-1000"
-                                            style={{ width: `${Math.min(((points || 0) / 50) * 100, 100)}%` }}
-                                        ></div>
-                                    </div>
-                                </div>
-                                <p className="text-[10px] text-taupe-light leading-relaxed italic">
-                                    "ドキュメントの登録やチャットでの活動を続けて、フクロウを進化させましょう。"
-                                </p>
-                            </div>
-                        </Card>
-                    </div>
-
-                    {/* Right Column: Stats & Actions */}
-                    <div className="md:col-span-2 space-y-8">
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">エンゲージメント</h1>
-                            <p className="text-taupe-light text-sm font-medium">組織のナレッジ蓄積への貢献度と成長記録。</p>
+                    <PremiumCard className="relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-5"><Zap size={40} /></div>
+                        <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">獲得ナレッジポイント</span>
+                        <div className="text-6xl font-thin tracking-tighter mb-2">{points}</div>
+                        <div className="flex items-center gap-2 text-sage text-xs font-bold">
+                            <TrendingUp size={14} /> +12.4% <span className="text-taupe-light/50 font-normal">先月比</span>
                         </div>
+                    </PremiumCard>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Card className="p-6 border-sage/20 bg-sage/5">
-                                <div className="flex justify-between items-start mb-2 text-sage">
-                                    <TrendingUp size={20} />
-                                    <span className="text-[10px] font-bold tracking-widest uppercase">先週比 +12%</span>
-                                </div>
-                                <p className="text-xs font-bold text-sage-light uppercase tracking-widest mb-1">ナレッジポイント</p>
-                                <p className="text-4xl font-black text-sage tracking-tighter">
-                                    {isLoading ? '...' : points}
-                                </p>
-                            </Card>
+                    <PremiumCard className="relative overflow-hidden bg-terracotta/5">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 text-terracotta"><Clock size={40} /></div>
+                        <span className="text-[10px] font-black text-terracotta/60 uppercase tracking-[0.2em] block mb-4">創出された時間 (Time Saved)</span>
+                        <div className="text-6xl font-thin tracking-tighter mb-2 text-terracotta">{timeSaved}h</div>
+                        <p className="text-[10px] text-taupe-light font-medium tracking-wide">
+                            組織全体で創出された「余裕」の時間。
+                        </p>
+                    </PremiumCard>
 
-                            <Card className="p-6">
-                                <div className="flex justify-between items-start mb-2 text-terracotta">
-                                    <Zap size={20} />
-                                </div>
-                                <p className="text-xs font-bold text-taupe-light uppercase tracking-widest mb-1">今週のランク</p>
-                                <p className="text-4xl font-black text-taupe tracking-tighter">#04</p>
-                            </Card>
+                    <PremiumCard className="relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-5"><Heart size={40} /></div>
+                        <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">受け取った感謝</span>
+                        <div className="text-6xl font-thin tracking-tighter mb-2">{thanksCount}</div>
+                        <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div key={i} className="w-1.5 h-1.5 bg-terracotta rounded-full"></div>
+                            ))}
                         </div>
-
-                        <Card className="p-8">
-                            <div className="flex flex-col items-center gap-6">
-                                <div className="p-4 bg-terracotta/10 rounded-full text-terracotta">
-                                    <Heart size={32} />
-                                </div>
-                                <div className="text-center max-w-xs">
-                                    <h3 className="font-bold text-lg text-taupe mb-2">感謝のサイクル</h3>
-                                    <p className="text-sm text-taupe-light leading-relaxed">
-                                        コミュニティやAIのサポートに感謝を伝えましょう。
-                                    </p>
-                                </div>
-                                <Button
-                                    className="px-8 font-bold"
-                                    onClick={handleThanks}
-                                    disabled={isLoading}
-                                >
-                                    <Heart size={16} className="mr-2 fill-current" />
-                                    感謝を送る
-                                </Button>
-                                <p className="text-[10px] text-slate-300 font-medium">
-                                    Firebase Realtime Supportと連携中
-                                </p>
-                            </div>
-                        </Card>
-                    </div>
-
+                    </PremiumCard>
                 </div>
-            </main>
 
+                {/* --- 3. Bottom Sections --- */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+
+                    {/* Activity Feed */}
+                    <div className="space-y-6">
+                        <h3 className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.3em] ml-2">最近の貢献アクティビティ</h3>
+                        <div className="space-y-4">
+                            {[
+                                { icon: <ShieldCheck size={18} />, title: 'リスクを回避', text: '重大な申請不備がナレッジにより未然に防がれました。', time: '34m ago', color: 'bg-sage' },
+                                { icon: <HelpCircle size={18} />, title: '支援が必要', text: '誰かが回答に辿り着けず、離脱しました。', time: '2h ago', color: 'bg-amber' },
+                                { icon: <Heart size={18} />, title: '感謝を受領', text: '佐藤さんより、提供情報への感謝が届きました。', time: 'Yesterday', color: 'bg-terracotta' },
+                            ].map((item, i) => (
+                                <div key={i} className="flex gap-6 items-start p-6 bg-white rounded-[2rem] border border-white hover:shadow-premium transition-all">
+                                    <div className={`p-3 rounded-2xl ${item.color} text-white shadow-lg`}>
+                                        {item.icon}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="text-[13px] font-bold tracking-tight">{item.title}</h4>
+                                            <span className="text-[9px] font-bold text-taupe-light/40 uppercase">{item.time}</span>
+                                        </div>
+                                        <p className="text-xs text-taupe-light leading-relaxed">{item.text}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Leaderboard & Network Overlay */}
+                    <div className="space-y-6">
+                        <h3 className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.1em] ml-2">ナレッジの繋がり (Wisdom Network)</h3>
+                        <PremiumCard className="relative h-[480px] flex flex-col">
+                            <div className="relative z-10 space-y-6 flex-1">
+                                {[
+                                    { rank: 1, name: `${user.name} (You)`, pts: points, badge: 'Sage' },
+                                    { rank: 2, name: '山田 花子', pts: 1180, badge: 'Knight' },
+                                    { rank: 3, name: '高橋 健一', pts: 950, badge: 'Seeker' }
+                                ].map((leader, i) => (
+                                    <div key={i} className={`flex items-center gap-4 p-3 rounded-2xl transition-all ${leader.rank === 1 ? 'bg-terracotta/5 border border-terracotta/10' : ''}`}>
+                                        <span className={`w-6 h-6 flex items-center justify-center text-[10px] font-black rounded-full ${leader.rank === 1 ? 'bg-terracotta text-white' : 'bg-taupe/5'}`}>
+                                            {leader.rank}
+                                        </span>
+                                        <div className="flex-1">
+                                            <div className="text-xs font-bold">{leader.name}</div>
+                                            <div className="text-[9px] font-bold uppercase text-taupe-light/60 tracking-widest">{leader.badge}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-xs font-bold tracking-tighter">{leader.pts}.pt</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Network Canvas (Faded Background) */}
+                            <div className="absolute bottom-0 left-0 right-0 h-[240px] opacity-40 rounded-b-[3rem] overflow-hidden">
+                                <canvas ref={canvasRef} className="w-full h-full"></canvas>
+                            </div>
+                        </PremiumCard>
+                    </div>
+                </div>
+
+            </main>
         </div>
     );
 }

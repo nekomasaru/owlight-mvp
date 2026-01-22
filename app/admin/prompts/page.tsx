@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Loader2, Save, ArrowLeft, RotateCcw } from 'lucide-react';
+import UserSwitcher from '@/components/UserSwitcher'; // Added
 
 export default function PromptAdminPage() {
     const [prompt, setPrompt] = useState('');
@@ -106,6 +107,7 @@ export default function PromptAdminPage() {
                         <h1 className="text-2xl font-bold text-taupe">システムプロンプト設定</h1>
                     </div>
                     <div className="flex items-center gap-2">
+                        <UserSwitcher />
                         <Button variant="outline" onClick={handleReset} disabled={saving}>
                             <RotateCcw className="mr-2" size={16} />
                             リセット

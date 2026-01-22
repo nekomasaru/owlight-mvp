@@ -10,8 +10,15 @@ import {
     MessageSquare,
     FileText,
     ChevronRight,
-    Database
+    Database,
+    AlertCircle,
+    Edit // Added
 } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import KnowledgeClipModal from '@/components/KnowledgeClipModal';
+import { useUser } from '@/contexts/UserContext';
+import UserSwitcher from '@/components/UserSwitcher'; // Added // Added
 
 // --- Simple Components (Consistent with Chat/Admin Pages) ---
 
@@ -41,13 +48,17 @@ type SearchResult = {
     title: string;
     content: string;
     score: number;
+    tags?: string[];
+    author?: string;
 };
 
 export default function SearchPage() {
+    const { user } = useUser(); // Use Context
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [editingItem, setEditingItem] = useState<SearchResult | null>(null);
 
     const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -76,6 +87,28 @@ export default function SearchPage() {
         }
     };
 
+    const handleEditSubmit = async (data: any) => {
+        if (!editingItem) return;
+        try {
+            const docRef = doc(db, 'knowledge', editingItem.id);
+            await updateDoc(docRef, {
+                content: data.memo,
+                tags: [data.tag],
+                author: data.author === 'self' ? user.name : data.author
+            });
+            // Local Update
+            setResults(prev => prev.map(r =>
+                r.id === editingItem.id
+                    ? { ...r, content: data.memo, title: data.tag, tags: [data.tag], author: data.author === 'self' ? user.name : data.author }
+                    : r
+            ));
+            alert("ナレッジを更新しました");
+        } catch (e) {
+            console.error(e);
+            alert("更新エラー");
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
 
@@ -91,6 +124,7 @@ export default function SearchPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <UserSwitcher />
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">
                             <ArrowLeft size={14} className="mr-2" />
@@ -108,9 +142,9 @@ export default function SearchPage() {
                         <Database size={40} strokeWidth={1.5} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">エビデンス検索</h1>
+                        <h1 className="text-3xl font-extrabold text-taupe tracking-tight mb-2 font-display">ナレッジ検索</h1>
                         <p className="text-taupe-light text-sm max-w-md mx-auto leading-relaxed">
-                            公式ドキュメント、社内ルール、ガイドラインなどの信頼できる情報源から検索します。
+                            庁内の共有ナレッジ（現場の知恵）を検索します。
                         </p>
                     </div>
 
@@ -169,9 +203,18 @@ export default function SearchPage() {
                                                 {result.title}
                                             </h3>
                                         </div>
-                                        <span className="text-[10px] font-bold tracking-tighter text-slate-300 bg-slate-50 px-2 py-1 rounded-full">
-                                            SCORE: {result.score.toFixed(2)}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setEditingItem(result)}
+                                                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-full text-slate-300 hover:text-terracotta hover:bg-slate-100 transition-all"
+                                                title="編集"
+                                            >
+                                                <Edit size={14} />
+                                            </button>
+                                            <span className="text-[10px] font-bold tracking-tighter text-slate-300 bg-slate-50 px-2 py-1 rounded-full">
+                                                SCORE: {result.score.toFixed(0)}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <div className="text-sm text-taupe-light leading-relaxed mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 font-medium">
@@ -204,6 +247,19 @@ export default function SearchPage() {
                         </div>
                     )}
                 </div>
+                {/* Edit Modal */}
+                {editingItem && (
+                    <KnowledgeClipModal
+                        isOpen={!!editingItem}
+                        onClose={() => setEditingItem(null)}
+                        onSubmit={handleEditSubmit}
+                        initialData={{
+                            memo: editingItem.content,
+                            tag: editingItem.tags?.[0] || '',
+                            author: editingItem.author || 'self'
+                        }}
+                    />
+                )}
             </main>
 
             {/* Design System Reference: Vercel / Linear / Notion / Algolia */}
