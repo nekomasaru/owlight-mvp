@@ -1,12 +1,20 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { User } from '@/types';
 
 export default function EngagementPage() {
-    // Static user data
-    const user: User = {
+    const [points, setPoints] = useState(10);
+
+    // Static user data (name only, points managed by state)
+    const user: Omit<User, 'points'> = {
         name: 'Taro',
-        points: 10,
+    };
+
+    const handleThanks = () => {
+        setPoints(prev => prev + 1);
     };
 
     return (
@@ -27,8 +35,14 @@ export default function EngagementPage() {
                     <div className="w-full grid grid-cols-1 gap-4">
                         <div className="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-100">
                             <p className="text-sm font-medium text-indigo-600 mb-1">Current Points</p>
-                            <p className="text-4xl font-extrabold text-indigo-700">{user.points}</p>
+                            <p className="text-4xl font-extrabold text-indigo-700">{points}</p>
                         </div>
+                    </div>
+
+                    <div className="w-full flex justify-center pt-2">
+                        <Button onClick={handleThanks} className="w-full sm:w-auto min-w-[120px]">
+                            感謝する
+                        </Button>
                     </div>
 
                     <div className="w-full pt-4 border-t border-gray-100">
