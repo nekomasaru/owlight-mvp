@@ -1,7 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { searchKnowledge } from "@/lib/knowledge";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+// Uploaded File URI (managed manually for MVP)
+// 庁内DXガイドラインv1
+const MANUAL_FILE_URI = "https://generativelanguage.googleapis.com/v1beta/files/tgzv6jannnt7";
 
 // In-memory rate limiter
 const requestsMap = new Map<string, number[]>();
@@ -45,8 +48,7 @@ export async function POST(req: Request) {
         }
 
         const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user');
-        const userQuery = lastUserMessage ? lastUserMessage.content : "";
-        const userInputLength = userQuery.length;
+        const userInputLength = lastUserMessage ? lastUserMessage.content.length : 0;
 
         // Logging variables
         const start = Date.now();
@@ -54,46 +56,44 @@ export async function POST(req: Request) {
         let responseText = "";
         let success = false;
         let errorMessage: string | null = null;
-        let ragHitCount = 0;
 
         try {
-            // --- RAG: Knowledge Search ---
-            const relatedDocs = searchKnowledge(userQuery);
-            ragHitCount = relatedDocs.length;
-
             // 3. Configure Model
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
-                    maxOutputTokens: 512,
-                    temperature: 0.2, // RAGでは正確性を高めるため低めのtemperatureを推奨
+                    maxOutputTokens: 1024, // ドキュメント参照のため少し長めに確保
+                    temperature: 0.2,      // 事実に基づく回答のため低めに
                 }
             });
 
-            // 4. Transform messages for Gemini & Inject Context
-            // システムプロンプト相当の役割をトップに追加
-            const contextText = relatedDocs.length > 0
-                ? `以下の情報を参考資料として、ユーザーの質問に日本語で答えてください。
-資料に見当たらない内容は「提供された資料には記載がありません」とはっきり答えてください。
+            // 4. Construct Contents with File API
+            // 会話の最初に、「ファイルを参照せよ」という指示と共に File Data を渡す
+            const systemPart = {
+                text: "あなたは自治体の有能なアシスタントです。添付の「庁内DXガイドライン」およびその他の資料に基づいて、ユーザーの質問に日本語で丁寧に回答してください。資料にない情報については推測せず、「資料には記載がありません」と答えてください。"
+            };
 
-【参考資料】
-${relatedDocs.map(d => `■${d.title}\n${d.content}`).join("\n\n")}`
-                : "あなたは自治体の有能なアシスタントです。質問に対し事実に基づいて丁寧に回答してください。";
+            const filePart = {
+                fileData: {
+                    mimeType: "text/plain",
+                    fileUri: MANUAL_FILE_URI
+                }
+            };
 
-            const contents = messages.map((m) => ({
+            // 最初のメッセージ（システム指示相当）
+            const systemMessage = {
+                role: "user",
+                parts: [filePart, systemPart]
+            };
+
+            // ユーザーの会話履歴
+            const historyContents = messages.map((m) => ({
                 role: m.role === "assistant" ? "model" : "user",
                 parts: [{ text: m.content }],
             }));
 
-            // 会話の文脈を崩さないよう、最新のユーザーメッセージの前にコンテキストを挿入するか、
-            // あるいはGeminiの「System Instruction」機能を使いたいが、
-            // 簡易実装として「最初のユーザーメッセージの前」または「メッセージリストの最初」に
-            // コンテキスト情報を付加する。
-            // ここではメッセージリストの最初に「システム指示」的なメッセージを仮想的に追加する。
-            contents.unshift({
-                role: "user",
-                parts: [{ text: `System Instruction: ${contextText}\n\nこれ以降、この指示に従って会話を続けてください。ユーザーの最初のメッセージは次から始まります。` }]
-            });
+            // 結合
+            const contents = [systemMessage, ...historyContents];
 
             // 5. Generate Content
             const result = await model.generateContent({
@@ -128,7 +128,7 @@ ${relatedDocs.map(d => `■${d.title}\n${d.content}`).join("\n\n")}`
                 durationMs,
                 success,
                 errorMessage,
-                ragHitCount // ログにRAGヒット数を追加
+                ragType: "google-file-api" // RAGの種類をログに記録
             };
             console.log("[LLM_LOG]", JSON.stringify(logObject));
         }
