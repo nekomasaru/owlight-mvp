@@ -132,7 +132,6 @@ export default function SearchPage() {
                                 className="h-10 px-6 rounded-xl font-bold"
                                 disabled={isLoading || !query.trim()}
                             >
-                            >
                                 {isLoading ? "検索中..." : "検索"}
                             </Button>
                         </div>
