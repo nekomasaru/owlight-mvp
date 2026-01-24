@@ -73,6 +73,7 @@ export default function FileAdminPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [dragActive, setDragActive] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{ name: string, displayName: string } | null>(null);
 
     useEffect(() => {
         fetchFiles();
@@ -118,13 +119,33 @@ export default function FileAdminPage() {
         }
     };
 
-    const handleDelete = async (name: string) => {
-        if (!confirm("本当にこのファイルを削除しますか？")) return;
+    const handleDelete = async (name: string, displayName: string) => {
+        setDeleteTarget({ name, displayName });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+
         try {
-            const res = await fetch(`/api/files?name=${name}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error("Delete failed");
-            setFiles(prev => prev.filter(f => f.name !== name));
+            if (deleteTarget.name === 'ALL') {
+                // Delete all files
+                const deletePromises = files.map(file =>
+                    fetch(`/api/files?vertexName=${encodeURIComponent(file.name)}&fileName=${encodeURIComponent(file.displayName)}`, { method: 'DELETE' })
+                );
+                await Promise.all(deletePromises);
+                setFiles([]);
+            } else {
+                // Delete single file - need to find the file to get both names
+                const fileToDelete = files.find(f => f.name === deleteTarget.name);
+                if (fileToDelete) {
+                    const res = await fetch(`/api/files?vertexName=${encodeURIComponent(fileToDelete.name)}&fileName=${encodeURIComponent(fileToDelete.displayName)}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error("Delete failed");
+                }
+                setFiles(prev => prev.filter(f => f.name !== deleteTarget.name));
+            }
+            setDeleteTarget(null);
         } catch (error) {
+            console.error("Error deleting:", error);
             alert("削除に失敗しました");
         }
     };
@@ -235,9 +256,26 @@ export default function FileAdminPage() {
                                     className="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-9 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-terracotta/10 focus:border-terracotta transition-all"
                                 />
                             </div>
-                            <Button variant="outline" className="h-8 w-8 p-0" onClick={fetchFiles} disabled={isLoading}>
-                                <RefreshCcw size={14} className={isLoading ? 'animate-spin' : ''} />
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button variant="outline" className="h-8 px-3" onClick={fetchFiles} disabled={isLoading}>
+                                    <svg className={`w-3.5 h-3.5 mr-1 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    <span className="text-xs">更新</span>
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    className="h-8 px-3"
+                                    onClick={() => setDeleteTarget({ name: 'ALL', displayName: '全てのファイル' })}
+                                    disabled={files.length === 0}
+                                    title="全削除"
+                                >
+                                    <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <span className="text-xs">全削除</span>
+                                </Button>
+                            </div>
                         </div>
 
                         <Card className="overflow-hidden">
@@ -262,9 +300,15 @@ export default function FileAdminPage() {
                                                     {getFileIcon(file.mimeType)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <div className="text-sm font-bold text-taupe truncate max-w-[200px] sm:max-w-xs" title={file.displayName}>
+                                                    <a
+                                                        href={`/api/files/proxy?name=${encodeURIComponent(file.displayName)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm font-bold text-taupe truncate max-w-[200px] sm:max-w-xs hover:text-terracotta hover:underline cursor-pointer transition-colors"
+                                                        title={file.displayName}
+                                                    >
                                                         {file.displayName}
-                                                    </div>
+                                                    </a>
                                                     <div className="flex items-center gap-3 mt-0.5 text-[10px] font-bold tracking-tight uppercase">
                                                         <span className={`flex items-center gap-1 ${file.state === 'ACTIVE' ? 'text-sage' : 'text-amber-500'}`}>
                                                             {file.state === 'ACTIVE' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
@@ -280,10 +324,13 @@ export default function FileAdminPage() {
 
                                             <Button
                                                 variant="destructive"
-                                                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => handleDelete(file.name)}
+                                                className="h-8 px-2"
+                                                onClick={() => handleDelete(file.name, file.displayName)}
                                             >
-                                                <Trash2 size={14} />
+                                                <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                <span className="text-xs">削除</span>
                                             </Button>
                                         </div>
                                     ))}
@@ -299,6 +346,36 @@ export default function FileAdminPage() {
 
                 </div>
             </main>
+
+            {/* Delete Confirmation Modal */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setDeleteTarget(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-50 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="p-3 bg-red-50 rounded-full text-2xl">
+                                ⚠️
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-taupe mb-2">ファイルの削除</h3>
+                                <p className="text-sm text-taupe-light leading-relaxed">
+                                    以下のファイルを削除してもよろしいですか？この操作は取り消せません。
+                                </p>
+                                <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <p className="text-sm font-bold text-taupe truncate">{deleteTarget.displayName}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+                                キャンセル
+                            </Button>
+                            <Button variant="destructive" onClick={confirmDelete}>
+                                削除する
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

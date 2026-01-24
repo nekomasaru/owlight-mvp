@@ -1,0 +1,6 @@
+{
+  "name": "projects/521279644990/locations/global/collections/default_collection/dataStores/owlight-manuals_1769273494575/branches/0/operations/import-documents-993291222246132635",
+  "metadata": {
+    "@type": "type.googleapis.com/google.cloud.discoveryengine.v1beta.ImportDocumentsMetadata"
+  }
+}

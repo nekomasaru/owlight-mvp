@@ -1,0 +1,20 @@
+{
+  "engines": [
+    {
+      "name": "projects/521279644990/locations/global/collections/default_collection/engines/owlight-search_1769272848383",
+      "displayName": "owlight-search",
+      "createTime": "2026-01-24T16:53:06.892551Z",
+      "dataStoreIds": [
+        "owlight-manuals_1769273494575"
+      ],
+      "solutionType": "SOLUTION_TYPE_SEARCH",
+      "searchEngineConfig": {
+        "searchTier": "SEARCH_TIER_STANDARD"
+      },
+      "commonConfig": {
+        "companyName": "OWLight"
+      },
+      "industryVertical": "GENERIC"
+    }
+  ]
+}

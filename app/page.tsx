@@ -18,7 +18,8 @@ import {
   Clock,
   Cpu,
   ChevronRight,
-  Settings
+  Settings,
+  FileText
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -114,8 +115,15 @@ const ModelCard = ({ id, active, onClick, quotas }: any) => (
 );
 
 const ChatMessage = ({ message, onLike, onAction }: { message: Message, onLike?: (id: string) => void, onAction: (type: string, id: string) => void }) => {
+  const { user } = useUser(); // Hook to get current role/mentorMode
   const isUser = message.role === 'user';
+
+  if (!isUser) {
+    console.log('[ChatMessage Debug] Message:', message.id, 'Citations:', message.citations);
+  }
+
   const [copied, setCopied] = useState(false);
+  const [activeCitation, setActiveCitation] = useState<any | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
@@ -150,6 +158,22 @@ const ChatMessage = ({ message, onLike, onAction }: { message: Message, onLike?:
             </ReactMarkdown>
           </div>
 
+          {/* New: Citations Display Section */}
+          {message.citations && message.citations.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {message.citations.map((citation: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveCitation(citation)}
+                  className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-taupe text-[11px] font-bold hover:border-terracotta/50 hover:text-terracotta hover:shadow-sm transition-all text-left max-w-full"
+                >
+                  <BookOpen size={12} className="flex-shrink-0 text-terracotta" />
+                  <span className="truncate max-w-[200px]">{citation.title || "出典"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Action Buttons - Always Visible */}
           <div className="flex items-center gap-3 mt-4 transition-all duration-300">
             <button
@@ -171,6 +195,51 @@ const ChatMessage = ({ message, onLike, onAction }: { message: Message, onLike?:
           </div>
         </div>
       </div>
+
+      {/* Internal Citation Viewer Modal for this message */}
+      {activeCitation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setActiveCitation(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-50 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-terracotta/10 rounded-lg text-terracotta">
+                  <BookOpen size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-taupe text-sm">参照ドキュメント</h4>
+                  <p className="text-xs text-taupe-light">{activeCitation.title}</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveCitation(null)} className="p-1 hover:bg-slate-100 rounded-full">
+                <LogOut size={16} className="text-slate-400" />
+              </button>
+            </div>
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-taupe leading-relaxed max-h-[60vh] overflow-y-auto custom-scrollbar whitespace-pre-wrap font-medium">
+              {(() => {
+                const content = activeCitation.text || activeCitation.contentSnippet || activeCitation.content || "内容が表示できません";
+                // Strip HTML tags and decode entities
+                return content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+              })()}
+            </div>
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <a
+                href={`/api/files/proxy?name=${encodeURIComponent(activeCitation.fileName || activeCitation.title || '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-2"
+              >
+                <FileText size={14} />
+                ファイルを開く
+              </a>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => setActiveCitation(null)} className="px-4 py-2 bg-slate-100 text-taupe text-xs font-bold rounded-lg hover:bg-slate-200">
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -419,7 +488,8 @@ export default function SaaSPage() {
       const msgs = snapshot.docs.map(doc => ({
         id: doc.id,
         role: doc.data().role,
-        content: doc.data().content
+        content: doc.data().content,
+        citations: doc.data().citations || [] // Include citations
       })) as Message[];
 
       if (msgs.length === 0) {
@@ -506,7 +576,7 @@ export default function SaaSPage() {
       await addDoc(collection(db, 'users', user.id, 'chats', chatId, 'messages'), {
         role: 'assistant',
         content: data.reply || "No response.",
-        citations: data.citiedKnowledge || [], // Save citations
+        citations: [...(data.citiedKnowledge || []), ...(data.vertexCitations || [])], // Save both knowledge and vertex citations
         createdAt: serverTimestamp()
       });
 

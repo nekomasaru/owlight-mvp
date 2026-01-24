@@ -1,0 +1,62 @@
+[
+  {
+    "name": "projects/521279644990/locations/global/collections/default_collection/dataStores/owlight-manuals_1769273494575/branches/0/documents/20852af90c9986c97f4e0315f0b018a6",
+    "id": "20852af90c9986c97f4e0315f0b018a6",
+    "schemaId": "default_schema",
+    "structData": {},
+    "parentDocumentId": "20852af90c9986c97f4e0315f0b018a6",
+    "content": {
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "uri": "gs://owlight/情報公開条例解釈・運用の手引（令和7年6月版）.docx"
+    },
+    "indexTime": "2026-01-24T18:41:26.831226547Z",
+    "indexStatus": {
+      "indexTime": "2026-01-24T18:41:26.831226547Z"
+    }
+  },
+  {
+    "name": "projects/521279644990/locations/global/collections/default_collection/dataStores/owlight-manuals_1769273494575/branches/0/documents/96ee4bfb2177bd56f730fdcf67c05f94",
+    "id": "96ee4bfb2177bd56f730fdcf67c05f94",
+    "schemaId": "default_schema",
+    "structData": {},
+    "parentDocumentId": "96ee4bfb2177bd56f730fdcf67c05f94",
+    "content": {
+      "mimeType": "application/pdf",
+      "uri": "gs://owlight/Project OWLight 事業構想書.pdf"
+    },
+    "indexTime": "2026-01-24T20:00:31.756439725Z",
+    "indexStatus": {
+      "indexTime": "2026-01-24T20:00:31.756439725Z"
+    }
+  },
+  {
+    "name": "projects/521279644990/locations/global/collections/default_collection/dataStores/owlight-manuals_1769273494575/branches/0/documents/acfec678f281ca985dc89552c3482b7b",
+    "id": "acfec678f281ca985dc89552c3482b7b",
+    "schemaId": "default_schema",
+    "structData": {},
+    "parentDocumentId": "acfec678f281ca985dc89552c3482b7b",
+    "content": {
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "uri": "gs://owlight/革命・革新性.docx"
+    },
+    "indexTime": "2026-01-24T19:46:44.387721431Z",
+    "indexStatus": {
+      "indexTime": "2026-01-24T19:46:44.387721431Z"
+    }
+  },
+  {
+    "name": "projects/521279644990/locations/global/collections/default_collection/dataStores/owlight-manuals_1769273494575/branches/0/documents/c310c93ffd1e1609d5f8b462ef47046a",
+    "id": "c310c93ffd1e1609d5f8b462ef47046a",
+    "schemaId": "default_schema",
+    "structData": {},
+    "parentDocumentId": "c310c93ffd1e1609d5f8b462ef47046a",
+    "content": {
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "uri": "gs://owlight/個人情報保護制度の手引（令和7年6月版）.docx"
+    },
+    "indexTime": "2026-01-24T18:41:34.627327845Z",
+    "indexStatus": {
+      "indexTime": "2026-01-24T18:41:34.627327845Z"
+    }
+  }
+]

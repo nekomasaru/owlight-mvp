@@ -1,33 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleAIFileManager } from "@google/generative-ai/server";
-import { writeFile } from 'fs/promises';
-import path from 'path';
-import fs from 'fs';
-import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
+import { GoogleAuth } from 'google-auth-library';
+import { container } from '@/src/di/container';
 
-const apiKey = process.env.GEMINI_API_KEY || "";
-const fileManager = new GoogleAIFileManager(apiKey);
+const BUCKET_NAME = "owlight"; // Hardcoded for MVP
 
-// 一時保存デレクトリ
-const UPLOAD_DIR = path.join(process.cwd(), "tmp/uploads");
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Helper to get Google Auth Token
+async function getAccessToken() {
+    const auth = new GoogleAuth({
+        keyFilename: './gcp-key.json',
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    return tokenResponse.token;
 }
 
-// GET: ファイル一覧の取得
+// GET: Vertex AI Searchの登録済みドキュメント一覧を取得
 export async function GET() {
     try {
-        const response = await fileManager.listFiles();
-        return NextResponse.json({ files: response.files });
+        const ragService = container.ragService as any;
+
+        if (!ragService.listDocuments) {
+            throw new Error("ragService does not support listDocuments method");
+        }
+
+        const documents = await ragService.listDocuments();
+
+        console.log('[FilesAPI] Vertex Documents Count:', documents.length);
+        if (documents.length > 0) {
+            console.log('[FilesAPI] Sample Document:', JSON.stringify(documents[0], null, 2));
+        }
+
+        // Transform Vertex documents to match UI expectations
+        const files = await Promise.all(documents.map(async (doc: any) => {
+            // Extract filename from content.uri (e.g., gs://owlight/filename.docx)
+            const uri = doc.content?.uri || '';
+            const fileName = uri.split('/').pop() || doc.id || 'unknown';
+
+            // Fetch file size from GCS
+            let sizeBytes = '0';
+            try {
+                const auth = new GoogleAuth({
+                    keyFilename: './gcp-key.json',
+                    scopes: ['https://www.googleapis.com/auth/cloud-platform']
+                });
+                const client = await auth.getClient();
+                const tokenResponse = await client.getAccessToken();
+                const accessToken = tokenResponse.token;
+
+                const metadataUrl = `https://storage.googleapis.com/storage/v1/b/owlight/o/${encodeURIComponent(fileName)}`;
+                const metaResponse = await fetch(metadataUrl, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+
+                if (metaResponse.ok) {
+                    const metadata = await metaResponse.json();
+                    sizeBytes = metadata.size || '0';
+                }
+            } catch (e) {
+                console.error(`[FilesAPI] Failed to get size for ${fileName}:`, e);
+            }
+
+            // Determine actual indexing status
+            // If indexStatus.indexTime exists, indexing is complete
+            const isIndexed = !!doc.indexStatus?.indexTime;
+
+            return {
+                name: doc.name, // Full Vertex document name (for delete API)
+                displayName: fileName,
+                uri: uri || `gs://owlight/${fileName}`,
+                mimeType: doc.content?.mimeType || 'application/octet-stream',
+                sizeBytes,
+                createTime: doc.indexTime || new Date().toISOString(),
+                updateTime: doc.indexTime || new Date().toISOString(),
+                state: isIndexed ? 'ACTIVE' : 'INDEXING'
+            };
+        }));
+
+        return NextResponse.json({ files });
     } catch (error) {
         console.error("List files error:", error);
         return NextResponse.json({ error: "Failed to list files" }, { status: 500 });
     }
 }
 
-// POST: ファイルのアップロード
+// POST: GCSへアップロード & Vertex AI Searchへインポート
 export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
@@ -38,58 +95,52 @@ export async function POST(req: NextRequest) {
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        let finalBuffer = buffer;
-        let mimeType = file.type || "text/plain";
-        let fileName = file.name;
+        const fileName = file.name;
 
-        // MIMEタイプまたは拡張子で判定してテキスト抽出
-        const isDocx = file.name.endsWith('.docx') || mimeType.includes('wordprocessingml');
-        const isXlsx = file.name.endsWith('.xlsx') || mimeType.includes('spreadsheetml');
+        // 1. Upload to GCS
+        const token = await getAccessToken();
+        if (!token) throw new Error("Failed to get access token");
 
-        if (isDocx) {
-            try {
-                const result = await mammoth.extractRawText({ buffer: buffer });
-                const textContent = result.value; // The raw text
-                finalBuffer = Buffer.from(textContent, 'utf-8');
-                mimeType = "text/plain";
-                // Gemini上で区別しやすいように名前を変えても良いが、ユーザー体験的には元の名前が良い
-                // ただし MIME=text/plain なので中身はそう扱う
-            } catch (e) {
-                console.error("Word processing error", e);
-                throw new Error("Wordファイルの読み込みに失敗しました");
-            }
-        } else if (isXlsx) {
-            try {
-                const workbook = XLSX.read(buffer, { type: 'buffer' });
-                let textContent = "";
-                workbook.SheetNames.forEach(sheetName => {
-                    const sheet = workbook.Sheets[sheetName];
-                    // CSVとしてテキスト化するのが手っ取り早い
-                    const csv = XLSX.utils.sheet_to_csv(sheet);
-                    textContent += `[Sheet: ${sheetName}]\n${csv}\n\n`;
-                });
-                finalBuffer = Buffer.from(textContent, 'utf-8');
-                mimeType = "text/plain";
-            } catch (e) {
-                console.error("Excel processing error", e);
-                throw new Error("Excelファイルの読み込みに失敗しました");
-            }
-        }
+        console.log(`[UploadAPI] Uploading ${fileName} to GCS bucket ${BUCKET_NAME}...`);
 
-        // 一時ファイルとして保存
-        const tempFilePath = path.join(UPLOAD_DIR, fileName);
-        await writeFile(tempFilePath, finalBuffer);
-
-        // Google File APIへアップロード
-        const uploadResponse = await fileManager.uploadFile(tempFilePath, {
-            mimeType: mimeType,
-            displayName: fileName,
+        const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${BUCKET_NAME}/o?uploadType=media&name=${encodeURIComponent(fileName)}`;
+        const gcsResponse = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': file.type || 'application/octet-stream'
+            },
+            body: buffer
         });
 
-        // 一時ファイルを削除
-        fs.unlinkSync(tempFilePath);
+        if (!gcsResponse.ok) {
+            const errText = await gcsResponse.text();
+            throw new Error(`GCS Upload failed: ${errText}`);
+        }
 
-        return NextResponse.json({ file: uploadResponse.file });
+        const gcsData = await gcsResponse.json();
+        console.log(`[UploadAPI] GCS Upload Success: ${gcsData.name}`);
+
+        // 2. Trigger Vertex AI Search Import
+        const gcsUri = `gs://${BUCKET_NAME}/${fileName}`;
+        console.log(`[UploadAPI] Triggering RAG Import for: ${gcsUri}`);
+
+        // Use the DI container to get the service (ensure type compatibility in your mind)
+        const ragService = container.ragService as any;
+        // We cast to any because the interface might not officially have importDocuments yet if we didn't update the interface definition,
+        // but the implementation class DOES have it.
+
+        if (ragService.importDocuments) {
+            await ragService.importDocuments(gcsUri);
+        } else {
+            console.warn("[UploadAPI] ragService does not support importDocuments method.");
+        }
+
+        return NextResponse.json({
+            success: true,
+            file: { name: fileName, uri: gcsUri },
+            message: "Upload and Import Triggered Successfully"
+        });
 
     } catch (error) {
         console.error("Upload error:", error);
@@ -97,17 +148,49 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// DELETE: ファイルの削除
+// DELETE: GCS及びVertex AI Searchからファイルを削除
 export async function DELETE(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
-        const name = searchParams.get("name"); // files/xxxx...
+        const vertexName = searchParams.get("vertexName"); // Full Vertex document name
+        const fileName = searchParams.get("fileName");       // Actual GCS filename
 
-        if (!name) {
-            return NextResponse.json({ error: "File name is required" }, { status: 400 });
+        if (!vertexName || !fileName) {
+            return NextResponse.json({ error: "Both vertexName and fileName are required" }, { status: 400 });
         }
 
-        await fileManager.deleteFile(name);
+        const token = await getAccessToken();
+        if (!token) throw new Error("No token");
+
+        console.log(`[DeleteAPI] Deleting - Vertex: ${vertexName}, GCS: ${fileName}`);
+
+        // 1. Delete from Vertex AI Search
+        const ragService = container.ragService as any;
+        if (ragService.deleteDocument) {
+            try {
+                await ragService.deleteDocument(vertexName);
+                console.log(`[DeleteAPI] Deleted from Vertex AI: ${vertexName}`);
+            } catch (vertexError) {
+                console.error(`[DeleteAPI] Vertex delete error (continuing):`, vertexError);
+                // Continue to GCS deletion even if Vertex fails
+            }
+        }
+
+        // 2. Delete from GCS using the actual filename
+        const deleteUrl = `https://storage.googleapis.com/storage/v1/b/${BUCKET_NAME}/o/${encodeURIComponent(fileName)}`;
+        const gcsResponse = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!gcsResponse.ok) {
+            const errorText = await gcsResponse.text();
+            console.error(`[DeleteAPI] GCS delete error: ${errorText}`);
+            throw new Error(`GCS delete failed: ${errorText}`);
+        } else {
+            console.log(`[DeleteAPI] Deleted from GCS: ${fileName}`);
+        }
+
         return NextResponse.json({ success: true });
 
     } catch (error) {

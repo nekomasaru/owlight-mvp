@@ -35,6 +35,7 @@ debug-*.ts
 
 # env files (can opt-in for committing if needed)
 .env*
+gcp-key.json
 
 # vercel
 .vercel
