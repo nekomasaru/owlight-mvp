@@ -43,6 +43,21 @@ const Card = ({ children, className = "" }: { children: React.ReactNode, classNa
     </div>
 );
 
+const Badge = ({ children, variant = "default", className = "", ...props }: any) => {
+    const baseStyle = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2";
+    const variants = {
+        default: "border-transparent bg-terracotta text-white hover:bg-terracotta/80",
+        secondary: "border-transparent bg-slate-100 text-taupe hover:bg-slate-200",
+        destructive: "border-transparent bg-red-500 text-white hover:bg-red-600",
+        outline: "text-taupe border-slate-200"
+    };
+    return (
+        <div className={`${baseStyle} ${variants[variant as keyof typeof variants] || variants.default} ${className}`} {...props}>
+            {children}
+        </div>
+    );
+};
+
 interface GoogleFile {
     name: string;
     displayName: string;
@@ -138,6 +153,9 @@ export default function FileAdminPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Link href="/admin/users">
+                        <Badge variant="outline" className="cursor-pointer hover:bg-slate-100 transition-colors">ユーザー管理</Badge>
+                    </Link>
                     <UserSwitcher />
                     <Link href="/">
                         <Button variant="ghost" className="h-8 text-xs font-semibold">

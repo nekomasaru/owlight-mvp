@@ -40,9 +40,11 @@ export async function POST(req: Request) {
         requestsMap.set(ip, timestamps);
 
         // 2. Parse Request
-        const { messages, model: requestedModel } = await req.json() as {
+        const { messages, model: requestedModel, mentorMode, stamina } = await req.json() as {
             messages: { role: "user" | "assistant"; content: string }[];
             model?: string;
+            mentorMode?: boolean;
+            stamina?: number;
         };
 
         // Determine which model to use
@@ -147,13 +149,26 @@ export async function POST(req: Request) {
 
             // --- Knowledge RAG: High Points ---
             let knowledgeContext = "";
+            let citiedKnowledgeDocs: any[] = []; // Store for response
+
             try {
                 const q = query(collection(db, 'knowledge'), orderBy('points', 'desc'), limit(5));
                 const snap = await getDocs(q);
                 if (!snap.empty) {
                     const list = snap.docs.map(d => {
                         const data = d.data();
-                        return `- [信頼度:${data.points}pt] ${data.content} (判断:${data.tags?.join(', ') || 'なし'})`;
+                        // 1. Add to context text
+                        const text = `- [信頼度:${data.points}pt] ${data.content} (判断:${data.tags?.join(', ') || 'なし'})`;
+
+                        // 2. Add to citation list
+                        citiedKnowledgeDocs.push({
+                            id: d.id,
+                            author: data.author,
+                            authorId: data.authorId,
+                            contributors: data.contributors || [] // Capture contributors
+                        });
+
+                        return text;
                     }).join('\n');
                     knowledgeContext = `\n\n### 庁内の共有ナレッジ (現場の知恵)\n以下の情報は、現場職員によって高く評価された重要な知恵です。回答にあたっては、この内容を最優先の指針として参照・引用してください：\n${list}`;
                 }
@@ -161,8 +176,23 @@ export async function POST(req: Request) {
                 console.error("Knowledge RAG failed:", e);
             }
 
+            // Mentor Mode Logic
+            let mentorContext = "";
+            if (mentorMode) {
+                mentorContext = `\n\n### メンターモード (新人職員サポート機能) ON 🔰
+現在、相手は「新人職員」です。以下の追加指示に従ってください：
+- **専門用語の噛み砕き**: 行政用語や専門用語を使う際は、必ずカッコ書きで補足説明（例：「起案（稟議書を作ること）」）を加えてください。
+- **背景の補足**: 単に答えを教えるだけでなく、「なぜそうするのか」という背景や文脈を丁寧に説明してください。
+- **ステップバイステップ**: 手順が複雑な場合は、番号付きリストで一つずつ分解して案内してください。
+- **励まし**: 不安を取り除くため、通常よりも温かく、肯定的な言葉掛けを意識してください。`;
+            } else if (stamina !== undefined && stamina < 20) {
+                mentorContext = `\n\n### 要休息モード ☕
+ユーザーのスタミナが低下しています（残り${stamina}）。
+回答は簡潔にし、「少し休憩しませんか？」といった労いの言葉を必ず添えてください。複雑な議論は避け、ユーザーの負担を減らすことを優先してください。`;
+            }
+
             // Append dynamic context based on file availability
-            const systemInstruction = `${systemPromptContent}${knowledgeContext}
+            const systemInstruction = `${systemPromptContent}${knowledgeContext}${mentorContext}
 
 ${activeFiles.length === 0 ? "\n現在、参照できる最新の資料はありません。一般的な知識で回答してください。" : "添付された資料の内容を最優先で参照してください。"}`;
 
@@ -211,7 +241,10 @@ ${activeFiles.length === 0 ? "\n現在、参照できる最新の資料はあり
             responseText = response.text();
             success = true;
 
-            return new Response(JSON.stringify({ reply: responseText }), {
+            return new Response(JSON.stringify({
+                reply: responseText,
+                citiedKnowledge: citiedKnowledgeDocs // Return citations
+            }), {
                 status: 200,
                 headers: { "Content-Type": "application/json" },
             });

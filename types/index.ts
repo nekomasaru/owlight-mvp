@@ -7,10 +7,21 @@ export type User = {
   department: string;
   points: number;
   stamina: number;
+  mentorMode: boolean;
+  timeSaved?: number;
+  thanksCount?: number;
+};
+
+export type Citation = {
+  id: string;
+  author: string;
+  authorId: string;
+  contributors?: string[];
 };
 
 export type Message = {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  citations?: Citation[];
 };

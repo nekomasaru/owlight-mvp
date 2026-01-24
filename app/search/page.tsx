@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     Search,
@@ -15,7 +15,7 @@ import {
     Edit // Added
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, collection, query as firestoreQuery, orderBy, limit, getDocs } from 'firebase/firestore';
 import KnowledgeClipModal from '@/components/KnowledgeClipModal';
 import { useUser } from '@/contexts/UserContext';
 import UserSwitcher from '@/components/UserSwitcher'; // Added // Added
@@ -87,6 +87,42 @@ export default function SearchPage() {
         }
     };
 
+    // Initial Fetch (Top Knowledge)
+    useEffect(() => {
+        const fetchInitialKnowledge = async () => {
+            setIsLoading(true);
+            try {
+                // Determine query - try without orderBy first to avoid index issues, sort client-side
+                const q = firestoreQuery(collection(db, 'knowledge'), limit(20));
+                const snap = await getDocs(q);
+
+                const initialData = snap.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        title: data.title || data.tags?.[0] || '無題のナレッジ',
+                        content: data.content || '',
+                        score: data.points || 0, // Map points to score
+                        tags: data.tags || [],
+                        author: data.author || '不明'
+                    } as SearchResult;
+                });
+
+                // Client-side sort by score desc
+                initialData.sort((a, b) => b.score - a.score);
+
+                setResults(initialData);
+            } catch (e: any) {
+                console.error("Initial fetch failed:", e);
+                setError("データの取得に失敗しました: " + (e.message || "不明なエラー"));
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchInitialKnowledge();
+    }, []);
+
     const handleEditSubmit = async (data: any) => {
         if (!editingItem) return;
         try {
@@ -94,7 +130,8 @@ export default function SearchPage() {
             await updateDoc(docRef, {
                 content: data.memo,
                 tags: [data.tag],
-                author: data.author === 'self' ? user.name : data.author
+                author: data.author === 'self' ? user.name : data.author,
+                contributors: arrayUnion(user.id) // Track contributor
             });
             // Local Update
             setResults(prev => prev.map(r =>

@@ -47,9 +47,8 @@ export default function EngagementPage() {
             if (docSnapshot.exists()) {
                 const data = docSnapshot.data();
                 setPoints(data.points || 0);
-                setTimeSaved(Math.floor(((data.points || 0) * 15) / 60));
-                setThanksCount(data.thanksCount || 12);
-                setIsLoading(false);
+                setTimeSaved(data.timeSaved || 0);
+                setThanksCount(data.thanksCount || 0);
                 setIsLoading(false);
             } else {
                 setDoc(userDocRef, { name: user.name, points: user.points, thanksCount: 3 });
@@ -185,7 +184,7 @@ export default function EngagementPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <PremiumCard className="relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5"><Zap size={40} /></div>
-                        <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">獲得ナレッジポイント</span>
+                        <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">これまで獲得したOWL Point</span>
                         <div className="text-6xl font-thin tracking-tighter mb-2">{points}</div>
                         <div className="flex items-center gap-2 text-sage text-xs font-bold">
                             <TrendingUp size={14} /> +12.4% <span className="text-taupe-light/50 font-normal">先月比</span>

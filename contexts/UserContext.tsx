@@ -11,7 +11,10 @@ export const PERSONAS: Record<UserRole, User> = {
         role: 'new_hire',
         department: 'General Affairs',
         points: 120,
-        stamina: 80,
+        stamina: 9999, // Effectively infinite
+        mentorMode: true,
+        timeSaved: 5,
+        thanksCount: 2,
     },
     veteran: {
         id: 'sato_02',
@@ -20,6 +23,9 @@ export const PERSONAS: Record<UserRole, User> = {
         department: 'City Planning',
         points: 850,
         stamina: 60,
+        mentorMode: false,
+        timeSaved: 45,
+        thanksCount: 12,
     },
     manager: {
         id: 'tanaka_03',
@@ -28,6 +34,9 @@ export const PERSONAS: Record<UserRole, User> = {
         department: 'Administration',
         points: 3200,
         stamina: 40,
+        mentorMode: false,
+        timeSaved: 120,
+        thanksCount: 25,
     },
 };
 
@@ -39,11 +48,33 @@ type UserContextType = {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+
 export function UserProvider({ children }: { children: ReactNode }) {
-    // Default to 'new_hire' (Suzuki)
+    // Current selected role/ID (starts with new_hire/Suzuki)
+    const [currentRoleId, setCurrentRoleId] = useState<UserRole>('new_hire');
     const [user, setUser] = useState<User>(PERSONAS.new_hire);
 
+    // Effect to switch subscription when ID changes
+    React.useEffect(() => {
+        const targetId = PERSONAS[currentRoleId].id;
+        // Subscribe to Firestore for real-time updates (Stamina, etc.)
+        const unsubscribe = onSnapshot(doc(db, "users", targetId), (docSnap) => {
+            if (docSnap.exists()) {
+                setUser({ ...docSnap.data() } as User);
+            } else {
+                // Fallback to static if not found in DB
+                setUser(PERSONAS[currentRoleId]);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [currentRoleId]);
+
     const switchUser = (role: UserRole) => {
+        setCurrentRoleId(role);
+        // Optimistic update to avoid flicker
         setUser(PERSONAS[role]);
     };
 

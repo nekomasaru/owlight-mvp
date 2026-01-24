@@ -107,6 +107,9 @@ export default function PromptAdminPage() {
                         <h1 className="text-2xl font-bold text-taupe">システムプロンプト設定</h1>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Link href="/admin/users">
+                            <span className="text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer hover:bg-slate-100 transition-colors">ユーザー管理</span>
+                        </Link>
                         <UserSwitcher />
                         <Button variant="outline" onClick={handleReset} disabled={saving}>
                             <RotateCcw className="mr-2" size={16} />

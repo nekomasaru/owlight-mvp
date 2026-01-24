@@ -39,6 +39,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import VitalityGauge from '@/components/ui/VitalityGauge'; // Added
 
 // --- Types ---
 
@@ -267,12 +268,51 @@ export default function SaaSPage() {
     setPointAnim({ x: window.innerWidth / 2, y: window.innerHeight / 2, text: '+5' });
     setTimeout(() => setPointAnim(null), 2000);
 
-    // 2. Firestore
+    // 2. Attribution for Cited Knowledge (New)
+    const msg = messages.find(m => m.id === id);
+    if (msg?.citations) {
+      // Collect all unique user IDs to credit (author + contributors)
+      const creditUserIds = new Set<string>();
+
+      msg.citations.forEach(c => {
+        if (c.authorId) creditUserIds.add(c.authorId);
+        if (c.contributors && Array.isArray(c.contributors)) {
+          c.contributors.forEach((uid: string) => creditUserIds.add(uid));
+        }
+      });
+
+      const uniqueAuthorIds = Array.from(creditUserIds);
+
+      for (const authorId of uniqueAuthorIds) {
+        if (typeof authorId === 'string' && authorId !== user.id) { // Don't credit self for liking own clip usage? Or do? Usually self-like is ignored but here it's AI usage.
+          // However, if I am the author of the clip, and the AI used it, and I like the AI message, I technically get points? 
+          // Let's allow it for now as "Thanks for using my knowledge".
+          const authorRef = doc(db, 'users', authorId);
+          await updateDoc(authorRef, {
+            points: increment(10),
+            thanksCount: increment(1)
+          });
+        }
+      }
+    }
+
+    // 3. Firestore (Current User)
     const statsRef = doc(db, 'users', user.id, 'stats', 'total');
     await setDoc(statsRef, {
       points: increment(5),
       heartsGiven: increment(1)
     }, { merge: true });
+
+    // 3.5 Sync to Main User Doc for Real-time Display
+    await updateDoc(doc(db, 'users', user.id), { points: increment(5) });
+
+    // 4. Recover OWL Point (Stamina)
+    if (!user.mentorMode) {
+      const newStamina = Math.min(200, user.stamina + 5);
+      if (newStamina !== user.stamina) {
+        await updateDoc(doc(db, 'users', user.id), { stamina: newStamina });
+      }
+    }
   };
 
   const handleModalSubmit = async (data: any) => {
@@ -280,11 +320,20 @@ export default function SaaSPage() {
     setPointAnim({ x: window.innerWidth / 2, y: window.innerHeight / 2, text: '+50' });
     setTimeout(() => setPointAnim(null), 2500);
 
+    // Map Author Name to ID (for attribution)
+    const AUTHOR_ID_MAP: { [key: string]: string } = {
+      'self': user.id,
+      'sato': 'sato_02',
+      'yamada': 'tanaka_03',
+    };
+    const authorId = AUTHOR_ID_MAP[data.author] || user.id;
+
     // 2. Firestore: Save Knowledge
     await addDoc(collection(db, 'knowledge'), {
       content: data.memo,
       tags: data.tag ? [data.tag] : [],
       author: data.author === 'self' ? user.name : data.author,
+      authorId: authorId, // Save ID for future attribution
       relatedMessageId: data.relatedMessage || null,
       points: 50,
       createdAt: serverTimestamp()
@@ -296,8 +345,45 @@ export default function SaaSPage() {
       points: increment(50),
       knowledgeCount: increment(1)
     }, { merge: true });
-  };
 
+    // 3.5 Sync to Main User Doc for Real-time Display
+    await updateDoc(doc(db, 'users', user.id), {
+      points: increment(50),
+      timeSaved: increment(5) // Each clip saves 5 mins
+    });
+
+    // 4. Recover OWL Point (Stamina)
+    if (!user.mentorMode) {
+      const newStamina = Math.min(200, user.stamina + 50);
+      if (newStamina !== user.stamina) {
+        await updateDoc(doc(db, 'users', user.id), { stamina: newStamina });
+      }
+    }
+
+    // 5. Proxy Thanks Bonus (Engagement)
+    if (data.author && data.author !== 'self') {
+      const targetId = AUTHOR_ID_MAP[data.author];
+      if (targetId) {
+        try {
+          const targetRef = doc(db, 'users', targetId);
+          const targetStatsRef = doc(db, 'users', targetId, 'stats', 'total');
+
+          await updateDoc(targetRef, {
+            points: increment(10),
+            thanksCount: increment(1)
+          });
+          await setDoc(targetStatsRef, {
+            points: increment(10),
+            thanksCount: increment(1)
+          }, { merge: true });
+
+          console.log(`Gave 10pt proxy bonus to ${targetId}`);
+        } catch (e) {
+          console.error("Failed to give proxy bonus", e);
+        }
+      }
+    }
+  };
   // 1. Load History
   useEffect(() => {
     const q = query(
@@ -381,10 +467,37 @@ export default function SaaSPage() {
         createdAt: serverTimestamp()
       });
 
+      // --- Stamina Consumption Logic ---
+      let currentStamina = user.stamina;
+
+      if (!user.mentorMode) {
+        const newStamina = Math.max(0, user.stamina - 10);
+        currentStamina = newStamina;
+        try {
+          // Direct update for immediate effect (Context will catch it via onSnapshot)
+          const userRef = doc(db, 'users', user.id);
+          await updateDoc(userRef, {
+            stamina: newStamina,
+            timeSaved: increment(1) // Each chat saves 1 min
+          });
+        } catch (e) {
+          console.error("Failed to consume stamina", e);
+        }
+      }
+
+      // Prepare Messages
+      const apiMessages = [...messages.filter(m => m.id !== 'welcome'), { role: 'user', content: text }]
+        .map(m => ({ role: m.role, content: m.content }));
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: text }], model: selectedModel }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          model: selectedModel,
+          mentorMode: user.mentorMode || false,
+          stamina: currentStamina
+        }),
       });
 
       if (!response.ok) throw new Error('API Error');
@@ -393,6 +506,7 @@ export default function SaaSPage() {
       await addDoc(collection(db, 'users', user.id, 'chats', chatId, 'messages'), {
         role: 'assistant',
         content: data.reply || "No response.",
+        citations: data.citiedKnowledge || [], // Save citations
         createdAt: serverTimestamp()
       });
 
@@ -434,9 +548,21 @@ export default function SaaSPage() {
             <Link href="/admin/files">
               <GlassButton variant="ghost" className="h-8 px-3 text-[10px] uppercase tracking-widest">ファイル管理</GlassButton>
             </Link>
+            <Link href="/admin/users">
+              <GlassButton variant="ghost" className="h-8 px-3 text-[10px] uppercase tracking-widest">ユーザー管理</GlassButton>
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3 border-l border-taupe/10 pl-4">
+            <div className="mr-2">
+              <VitalityGauge
+                value={user.stamina > 1000 ? 100 : user.stamina}
+                max={200}
+                isInfinite={user.stamina > 1000}
+                label="OWL Point"
+              />
+            </div>
+            <UserSwitcher />
             <button
               onClick={() => { localStorage.removeItem('lastMorningRitual'); window.location.reload(); }}
               className="p-2 text-taupe-light hover:text-terracotta transition-colors"
