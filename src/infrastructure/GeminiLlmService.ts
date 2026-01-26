@@ -14,9 +14,21 @@ export class GeminiLlmService implements ILlmService {
 
     async generateCompletion(prompt: string, history: any[] = []): Promise<string> {
         try {
-            // Convert simpler history format if needed, or assume compatible
+            // Ensure history starts with 'user' role
+            let adjustedHistory = [...history];
+
+            // Debug logging
+            console.log('Original History Roles:', history.map(h => h.role));
+
+            while (adjustedHistory.length > 0 && adjustedHistory[0].role !== 'user') {
+                console.log('Dropping invalid start role:', adjustedHistory[0].role);
+                adjustedHistory.shift();
+            }
+
+            console.log('Adjusted History Roles:', adjustedHistory.map(h => h.role));
+
             const chat = this.model.startChat({
-                history: history.map(h => ({
+                history: adjustedHistory.map(h => ({
                     role: h.role === 'assistant' ? 'model' : 'user',
                     parts: [{ text: h.content }]
                 }))

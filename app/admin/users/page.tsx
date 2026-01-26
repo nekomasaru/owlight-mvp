@@ -20,10 +20,9 @@ import {
     Heart
 } from 'lucide-react';
 import UserSwitcher from '@/components/UserSwitcher';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { User, UserRole } from '@/types';
 import { PERSONAS } from '@/contexts/UserContext';
+import { useToast } from '@/contexts/ToastContext';
 
 // --- Reusable Components (Consistent with other Admin pages) ---
 
@@ -31,10 +30,10 @@ const Button = ({ children, variant = "primary", className = "", ...props }: any
     const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 shadow-sm active:scale-95";
     const variants = {
         primary: "bg-terracotta text-white hover:bg-terracotta/90",
-        secondary: "bg-white text-taupe border border-slate-200 hover:bg-slate-50 hover:text-terracotta",
-        ghost: "hover:bg-slate-100 text-taupe-light hover:text-terracotta transition-colors shadow-none",
-        outline: "border border-slate-200 bg-transparent hover:bg-slate-100 text-taupe shadow-none",
-        destructive: "bg-white text-red-500 border border-slate-200 hover:bg-red-50 hover:border-red-200 shadow-none"
+        secondary: "bg-white dark:bg-card text-taupe dark:text-foreground border border-slate-200 dark:border-border hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-terracotta",
+        ghost: "hover:bg-slate-100 dark:hover:bg-slate-800 text-taupe-light hover:text-terracotta transition-colors shadow-none",
+        outline: "border border-slate-200 dark:border-border bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-taupe dark:text-foreground shadow-none",
+        destructive: "bg-white dark:bg-card text-red-500 border border-slate-200 dark:border-border hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 shadow-none"
     };
     return (
         <button className={`${baseStyle} ${variants[variant as keyof typeof variants]} ${className}`} {...props}>
@@ -44,7 +43,7 @@ const Button = ({ children, variant = "primary", className = "", ...props }: any
 };
 
 const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-    <div className={`rounded-xl border border-slate-200 bg-white text-taupe shadow-sm ${className}`}>
+    <div className={`rounded-xl bg-card text-foreground shadow-sm ${className}`}>
         {children}
     </div>
 );
@@ -68,43 +67,57 @@ export default function UserAdminPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Partial<User>>({});
+    const { showSuccess, showError } = useToast();
 
-    useEffect(() => {
-        const unsubscribe = subscribeToUsers();
-        return () => unsubscribe();
-    }, []);
-
-    const subscribeToUsers = () => {
+    const fetchUsers = async () => {
         setIsLoading(true);
-        const q = collection(db, "users");
-        return onSnapshot(q, (querySnapshot) => {
-            const fetchedUsers: User[] = [];
-            querySnapshot.forEach((doc) => {
-                fetchedUsers.push(doc.data() as User);
-            });
-            setUsers(fetchedUsers);
+        try {
+            const res = await fetch('/api/users');
+            const data = await res.json();
+            if (data.users) {
+                // Map from DomainUser to User type
+                const mappedUsers = data.users.map((u: any) => ({
+                    id: u.id,
+                    name: u.name,
+                    role: u.role,
+                    department: u.department,
+                    mentorMode: u.mentorMode,
+                    points: u.points,
+                    thanksCount: u.thanksCount,
+                    timeSaved: u.timeSaved
+                }));
+                setUsers(mappedUsers);
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        } finally {
             setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching users:", error);
-            setIsLoading(false);
-        });
+        }
     };
 
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
     const handleSeedUsers = async () => {
-        if (!confirm("初期ユーザーデータ（Suzuki, Sato, Tanaka）をFirestoreに上書きしますか？既存の変更が失われる可能性があります。")) return;
+        if (!confirm("初期ユーザーデータ（Suzuki, Sato, Tanaka）をSupabaseに上書きしますか？既存の変更が失われる可能性があります。")) return;
 
         setIsLoading(true);
         try {
-            const batch = [];
             // Use PERSONAS to seed
             for (const key of Object.keys(PERSONAS) as UserRole[]) {
                 const user = PERSONAS[key];
-                await setDoc(doc(db, "users", user.id), user);
+                await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(user)
+                });
             }
-            alert("ユーザーデータを初期化しました。");
+            showSuccess("初期化成功", "ユーザーデータをリセットしました。");
+            fetchUsers(); // Refresh list
         } catch (error) {
             console.error("Error seeding users:", error);
-            alert("ユーザー初期化に失敗しました。");
+            showError("初期化失敗", "データの投入に失敗しました。");
         } finally {
             setIsLoading(false);
         }
@@ -124,58 +137,45 @@ export default function UserAdminPage() {
         if (!editingId || !editForm) return;
 
         try {
-            const userRef = doc(db, "users", editingId);
-            await updateDoc(userRef, editForm);
+            await fetch('/api/users', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: editingId, ...editForm })
+            });
 
             setUsers(prev => prev.map(u => u.id === editingId ? { ...u, ...editForm } as User : u));
             setEditingId(null);
             setEditForm({});
+            showSuccess("更新完了", "ユーザー情報を更新しました。");
         } catch (error) {
             console.error("Error updating user:", error);
-            alert("更新に失敗しました");
+            showError("更新エラー", "ユーザー情報の更新に失敗しました。");
         }
     };
 
     const handleDeleteUser = async (id: string) => {
         if (!confirm("このユーザーを削除しますか？")) return;
         try {
-            await deleteDoc(doc(db, "users", id));
+            await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
+            setUsers(prev => prev.filter(u => u.id !== id));
+            showSuccess("削除完了", "ユーザーを削除しました。");
         } catch (error) {
             console.error("Error deleting user:", error);
-            alert("削除に失敗しました");
+            showError("削除エラー", "ユーザーの削除に失敗しました。");
         }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+        <div className="min-h-screen bg-background flex flex-col font-sans text-foreground">
             {/* Header */}
-            <header className="sticky top-0 z-10 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 h-14 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full border border-terracotta overflow-hidden shadow-sm">
-                        <img src="/Mr.OWL.jpg" alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-taupe text-lg tracking-tight">OWLight</span>
-                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">Admin</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <UserSwitcher />
-                    <Link href="/">
-                        <Button variant="ghost" className="h-8 text-xs font-semibold">
-                            <ArrowLeft size={14} className="mr-2" />
-                            チャットに戻る
-                        </Button>
-                    </Link>
-                </div>
-            </header>
+            {/* Header Removed */}
 
             <main className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col gap-8">
                 {/* Hero */}
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-taupe tracking-tight mb-1 font-display">ユーザー管理</h1>
-                        <p className="text-taupe-light text-sm font-medium">ペルソナ設定、ロール権限、およびスタミナパラメータを管理します。</p>
+                        <p className="text-taupe-light text-sm font-medium">ペルソナ設定およびロール権限を管理します。</p>
                     </div>
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={handleSeedUsers} disabled={isLoading}>
@@ -189,12 +189,11 @@ export default function UserAdminPage() {
                 <Card className="overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-taupe-light uppercase font-bold text-[10px] tracking-wider border-b border-slate-100">
+                            <thead className="bg-muted text-muted-foreground uppercase font-bold text-[10px] tracking-wider border-b border-slate-100/50">
                                 <tr>
                                     <th className="px-6 py-3">User / ID</th>
                                     <th className="px-6 py-3">Role & Dept</th>
-                                    <th className="px-6 py-3 text-center">Score</th>
-                                    <th className="px-6 py-3 text-center">OWL Point</th>
+                                    <th className="px-6 py-3 text-center">OWL Points</th>
                                     <th className="px-6 py-3 text-center">Time Saved</th>
                                     <th className="px-6 py-3 text-center">Thanks</th>
                                     <th className="px-6 py-3 text-center">Mentor Mode</th>
@@ -210,9 +209,9 @@ export default function UserAdminPage() {
                                     </tr>
                                 ) : (
                                     users.map((user) => (
-                                        <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <tr key={user.id} className="hover:bg-muted/50 transition-colors">
                                             <td className="px-6 py-4">
-                                                <div className="font-bold text-taupe">{user.name}</div>
+                                                <div className="font-bold text-foreground">{user.name}</div>
                                                 <div className="text-xs text-slate-400 font-mono">{user.id}</div>
                                             </td>
 
@@ -259,34 +258,12 @@ export default function UserAdminPage() {
                                                     <span className="font-mono font-bold text-taupe">{user.points || 0}</span>
                                                     <div className="flex items-center gap-0.5 text-[9px] text-terracotta/60 font-black tracking-tighter uppercase">
                                                         <Zap size={8} fill="currentColor" />
-                                                        Score
+                                                        OWL Points
                                                     </div>
                                                 </div>
                                             </td>
 
-                                            {/* OWL Point (Stamina) */}
-                                            <td className="px-6 py-4 text-center">
-                                                {editingId === user.id ? (
-                                                    <input
-                                                        type="number"
-                                                        className="w-20 text-center border rounded p-1 text-xs"
-                                                        value={editForm.stamina}
-                                                        onChange={(e) => setEditForm({ ...editForm, stamina: Number(e.target.value) })}
-                                                    />
-                                                ) : (
-                                                    <div className="flex flex-col items-center">
-                                                        <div className="flex items-center gap-1 font-mono font-medium text-taupe">
-                                                            <Activity size={14} className={user.stamina < 40 ? "text-red-500 animate-pulse" : "text-sage"} />
-                                                            <div className="flex flex-col items-center leading-none">
-                                                                <span className="text-sm font-bold">{user.stamina} / 200</span>
-                                                                <span className="text-[10px] text-slate-400">
-                                                                    ({Math.min(100, Math.round((user.stamina / 200) * 100))}%)
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </td>
+
 
                                             {/* Time Saved */}
                                             <td className="px-6 py-4 text-center">

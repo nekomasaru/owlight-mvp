@@ -25,10 +25,10 @@ const Button = ({ children, variant = "primary", className = "", ...props }: any
     const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 shadow-sm active:scale-95";
     const variants = {
         primary: "bg-terracotta text-white hover:bg-terracotta/90",
-        secondary: "bg-white text-taupe border border-slate-200 hover:bg-slate-50 hover:text-terracotta",
-        ghost: "hover:bg-slate-100 text-taupe-light hover:text-terracotta transition-colors shadow-none",
-        outline: "border border-slate-200 bg-transparent hover:bg-slate-100 text-taupe shadow-none",
-        destructive: "bg-white text-red-500 border border-slate-200 hover:bg-red-50 hover:border-red-200 shadow-none"
+        secondary: "bg-white dark:bg-card text-taupe dark:text-foreground border border-slate-200 dark:border-border hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-terracotta",
+        ghost: "hover:bg-slate-100 dark:hover:bg-slate-800 text-taupe-light hover:text-terracotta transition-colors shadow-none",
+        outline: "border border-slate-200 dark:border-border bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-taupe dark:text-foreground shadow-none",
+        destructive: "bg-white dark:bg-card text-red-500 border border-slate-200 dark:border-border hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 shadow-none"
     };
     return (
         <button className={`${baseStyle} ${variants[variant as keyof typeof variants]} ${className}`} {...props}>
@@ -38,7 +38,7 @@ const Button = ({ children, variant = "primary", className = "", ...props }: any
 };
 
 const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-    <div className={`rounded-xl border border-slate-200 bg-white text-taupe shadow-sm ${className}`}>
+    <div className={`rounded-xl bg-card text-foreground shadow-sm ${className}`}>
         {children}
     </div>
 );
@@ -68,12 +68,17 @@ interface GoogleFile {
     uri: string;
 }
 
+import { useToast } from '@/contexts/ToastContext';
+
+// ... (imports remain)
+
 export default function FileAdminPage() {
     const [files, setFiles] = useState<GoogleFile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ name: string, displayName: string } | null>(null);
+    const { showSuccess, showError } = useToast();
 
     useEffect(() => {
         fetchFiles();
@@ -84,7 +89,11 @@ export default function FileAdminPage() {
         try {
             const res = await fetch('/api/files');
             const data = await res.json();
-            if (data.files) setFiles(data.files);
+            if (data.files) {
+                // Filter out system JSON files (Knowledge data)
+                const userFiles = data.files.filter((f: any) => !f.name.endsWith('.json') && !f.name.startsWith('req_'));
+                setFiles(userFiles);
+            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -104,6 +113,10 @@ export default function FileAdminPage() {
         if (e.dataTransfer.files && e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]);
     };
 
+    const handleDelete = async (name: string, displayName: string) => {
+        setDeleteTarget({ name, displayName });
+    };
+
     const handleUpload = async (file: File) => {
         setIsUploading(true);
         const formData = new FormData();
@@ -112,17 +125,15 @@ export default function FileAdminPage() {
             const res = await fetch('/api/files', { method: 'POST', body: formData });
             if (!res.ok) throw new Error("Upload failed");
             await fetchFiles();
+            showSuccess("アップロード完了", "ファイルがナレッジベースに追加されました。");
         } catch (error) {
-            alert("アップロードに失敗しました");
+            showError("アップロード失敗", "ファイルのアップロード中にエラーが発生しました。");
         } finally {
             setIsUploading(false);
         }
     };
 
-    const handleDelete = async (name: string, displayName: string) => {
-        setDeleteTarget({ name, displayName });
-    };
-
+    // ... (confirmDelete part)
     const confirmDelete = async () => {
         if (!deleteTarget) return;
 
@@ -144,9 +155,10 @@ export default function FileAdminPage() {
                 setFiles(prev => prev.filter(f => f.name !== deleteTarget.name));
             }
             setDeleteTarget(null);
+            showSuccess("削除完了", "ファイルを削除しました。");
         } catch (error) {
             console.error("Error deleting:", error);
-            alert("削除に失敗しました");
+            showError("削除失敗", "ファイルの削除中にエラーが発生しました。");
         }
     };
 
@@ -160,32 +172,7 @@ export default function FileAdminPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-
-            {/* Header (Consistent with Chat) */}
-            <header className="sticky top-0 z-10 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 h-14 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full border border-terracotta overflow-hidden shadow-sm">
-                        <img src="/Mr.OWL.jpg" alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-taupe text-lg tracking-tight">OWLight</span>
-                        <span className="text-taupe-light text-[10px] font-bold uppercase tracking-wider border border-slate-200 rounded px-1.5 py-0.5">Admin</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Link href="/admin/users">
-                        <Badge variant="outline" className="cursor-pointer hover:bg-slate-100 transition-colors">ユーザー管理</Badge>
-                    </Link>
-                    <UserSwitcher />
-                    <Link href="/">
-                        <Button variant="ghost" className="h-8 text-xs font-semibold">
-                            <ArrowLeft size={14} className="mr-2" />
-                            チャットに戻る
-                        </Button>
-                    </Link>
-                </div>
-            </header>
+        <div className="min-h-screen bg-background flex flex-col font-sans text-foreground">
 
             <main className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex flex-col gap-8">
 
@@ -210,7 +197,7 @@ export default function FileAdminPage() {
                             <div
                                 className={`
                                     relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
-                                    ${dragActive ? 'border-terracotta bg-terracotta/5' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'}
+                                    ${dragActive ? 'border-terracotta bg-terracotta/5' : 'border-slate-200 bg-muted/50 hover:bg-muted hover:border-slate-300'}
                                     ${isUploading ? 'opacity-50' : ''}
                                 `}
                                 onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
@@ -253,7 +240,7 @@ export default function FileAdminPage() {
                                 <input
                                     type="text"
                                     placeholder="ファイルをフィルタ..."
-                                    className="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-9 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-terracotta/10 focus:border-terracotta transition-all"
+                                    className="w-full bg-card border border-slate-100 rounded-lg py-1.5 pl-9 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-terracotta/10 focus:border-terracotta transition-all"
                                 />
                             </div>
                             <div className="flex gap-2">
@@ -294,9 +281,9 @@ export default function FileAdminPage() {
                             ) : (
                                 <div className="divide-y divide-slate-100">
                                     {files.map((file) => (
-                                        <div key={file.name} className="p-4 hover:bg-slate-50/50 transition-colors flex items-center justify-between group">
+                                        <div key={file.name} className="p-4 hover:bg-muted/50 transition-colors flex items-center justify-between group">
                                             <div className="flex items-center gap-4">
-                                                <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 group-hover:bg-white group-hover:shadow-sm transition-all">
+                                                <div className="p-2 bg-muted rounded-lg group-hover:bg-card group-hover:shadow-sm transition-all">
                                                     {getFileIcon(file.mimeType)}
                                                 </div>
                                                 <div className="min-w-0">

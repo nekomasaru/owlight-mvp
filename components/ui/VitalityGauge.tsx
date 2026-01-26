@@ -1,61 +1,47 @@
 import React from 'react';
-import { Zap, Battery, BatteryCharging, BatteryWarning, BatteryFull, Activity } from 'lucide-react';
+import { Sparkles, Activity } from 'lucide-react';
 
 interface VitalityGaugeProps {
-    value: number;       // Current stamina (0-100+)
-    max?: number;        // Max stamina (default 100, if >100 treated as infinite)
-    label?: string;      // Label text (default "Vitality")
-    isInfinite?: boolean; // If true, show infinity symbol
+    value: number;       // Now represents OWL Points (Virtue)
+    max?: number;        // Not used anymore but kept for compatibility
+    label?: string;      // Label text
+    isInfinite?: boolean; // Not used anymore
 }
 
-export default function VitalityGauge({ value, max = 100, label = "Vitality", isInfinite = false }: VitalityGaugeProps) {
-    // Determine color based on percentage
-    // 80-100: Sage (Green/Healthy)
-    // 40-79:  Amber (Caution)
-    // 0-39:   Rose (Danger/Tired)
-
-    // If infinite, always Sage
-    const isHealthy = isInfinite || value >= 80;
-    const isCaution = !isInfinite && value >= 40 && value < 80;
-    const isDanger = !isInfinite && value < 40;
-
-    const colorClass = isHealthy ? "bg-sage text-sage" :
-        isCaution ? "bg-amber-400 text-amber-500" :
-            "bg-red-400 text-red-500";
-
-    const barColorClass = isHealthy ? "bg-sage" :
-        isCaution ? "bg-amber-400" :
-            "bg-red-400";
-
-    // Calculate width percentage (clamped 0-100)
-    const percentage = isInfinite ? 100 : Math.min(100, Math.max(0, (value / max) * 100));
+export default function VitalityGauge({ value, label = "Virtue", compressed = false }: VitalityGaugeProps & { compressed?: boolean }) {
+    if (compressed) {
+        return (
+            <div className="flex flex-col items-center justify-center p-2 bg-white/50 backdrop-blur-sm border border-terracotta/20 rounded-xl shadow-sm hover:border-terracotta/40 transition-all cursor-help group" title={`${label}: ${value} pts`}>
+                <Sparkles size={14} className="text-terracotta mb-1 group-hover:animate-spin-slow" />
+                <span className="text-[10px] font-black text-terracotta tabular-nums leading-none">
+                    {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+                </span>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col gap-1 min-w-[120px]">
+        <div className="flex flex-col gap-1 min-w-[120px] cursor-help" title={`${label}: ${value} pts`}>
             <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-taupe-light">
                 <span className="flex items-center gap-1">
-                    <Activity size={10} className={isDanger ? "animate-pulse text-red-500" : ""} />
-                    {label}
-                </span>
-                <span className="font-mono">
-                    {isInfinite ? "∞" : `${Math.round(value)}%`}
+                    <Sparkles size={10} className="text-terracotta" />
+                    OWLポイント
                 </span>
             </div>
 
-            {/* Gauge Bar */}
-            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 shadow-inner relative">
-                {/* Background segments (optional for decoration) */}
-                <div className="absolute inset-0 w-full h-full opacity-10 flex">
-                    <div className="w-[40%] h-full bg-red-400"></div>
-                    <div className="w-[40%] h-full bg-amber-400"></div>
-                    <div className="w-[20%] h-full bg-sage"></div>
+            {/* Point Display */}
+            <div className="relative overflow-hidden bg-white/50 backdrop-blur-sm border border-terracotta/20 rounded-xl px-4 py-2 shadow-sm group hover:shadow-glow hover:border-terracotta/40 transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-r from-terracotta/5 to-transparent opacity-50" />
+
+                <div className="relative flex items-baseline gap-1 justify-center">
+                    <span className="text-2xl font-black text-terracotta tracking-tight tabular-nums">
+                        {value.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] font-bold text-terracotta/60 uppercase">pts</span>
                 </div>
 
-                {/* Action Bar */}
-                <div
-                    className={`h-full rounded-full transition-all duration-500 ease-out ${barColorClass} ${isInfinite ? 'animate-pulse-slow' : ''}`}
-                    style={{ width: `${percentage}%` }}
-                />
+                {/* Shine effect */}
+                <div className="absolute top-0 -left-[100%] w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent group-hover:animate-shimmer" />
             </div>
         </div>
     );

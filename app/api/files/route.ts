@@ -15,66 +15,34 @@ async function getAccessToken() {
     return tokenResponse.token;
 }
 
-// GET: Vertex AI Searchの登録済みドキュメント一覧を取得
+// GET: GCSバケットからファイル一覧を取得
 export async function GET() {
     try {
-        const ragService = container.ragService as any;
+        const token = await getAccessToken();
+        if (!token) throw new Error("Failed to get access token");
 
-        if (!ragService.listDocuments) {
-            throw new Error("ragService does not support listDocuments method");
+        const listUrl = `https://storage.googleapis.com/storage/v1/b/${BUCKET_NAME}/o`;
+        const res = await fetch(listUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            console.error('[FilesAPI] Failed to list GCS objects:', await res.text());
+            throw new Error('Failed to list GCS objects');
         }
 
-        const documents = await ragService.listDocuments();
+        const data = await res.json();
+        const items = data.items || [];
 
-        console.log('[FilesAPI] Vertex Documents Count:', documents.length);
-        if (documents.length > 0) {
-            console.log('[FilesAPI] Sample Document:', JSON.stringify(documents[0], null, 2));
-        }
-
-        // Transform Vertex documents to match UI expectations
-        const files = await Promise.all(documents.map(async (doc: any) => {
-            // Extract filename from content.uri (e.g., gs://owlight/filename.docx)
-            const uri = doc.content?.uri || '';
-            const fileName = uri.split('/').pop() || doc.id || 'unknown';
-
-            // Fetch file size from GCS
-            let sizeBytes = '0';
-            try {
-                const auth = new GoogleAuth({
-                    keyFilename: './gcp-key.json',
-                    scopes: ['https://www.googleapis.com/auth/cloud-platform']
-                });
-                const client = await auth.getClient();
-                const tokenResponse = await client.getAccessToken();
-                const accessToken = tokenResponse.token;
-
-                const metadataUrl = `https://storage.googleapis.com/storage/v1/b/owlight/o/${encodeURIComponent(fileName)}`;
-                const metaResponse = await fetch(metadataUrl, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-
-                if (metaResponse.ok) {
-                    const metadata = await metaResponse.json();
-                    sizeBytes = metadata.size || '0';
-                }
-            } catch (e) {
-                console.error(`[FilesAPI] Failed to get size for ${fileName}:`, e);
-            }
-
-            // Determine actual indexing status
-            // If indexStatus.indexTime exists, indexing is complete
-            const isIndexed = !!doc.indexStatus?.indexTime;
-
-            return {
-                name: doc.name, // Full Vertex document name (for delete API)
-                displayName: fileName,
-                uri: uri || `gs://owlight/${fileName}`,
-                mimeType: doc.content?.mimeType || 'application/octet-stream',
-                sizeBytes,
-                createTime: doc.indexTime || new Date().toISOString(),
-                updateTime: doc.indexTime || new Date().toISOString(),
-                state: isIndexed ? 'ACTIVE' : 'INDEXING'
-            };
+        const files = items.map((item: any) => ({
+            name: item.name,
+            displayName: item.name,
+            uri: `gs://${BUCKET_NAME}/${item.name}`,
+            mimeType: item.contentType || 'application/octet-stream',
+            sizeBytes: item.size,
+            createTime: item.timeCreated,
+            updateTime: item.updated,
+            state: 'ACTIVE' // GCSにある＝利用可能とする
         }));
 
         return NextResponse.json({ files });

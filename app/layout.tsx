@@ -19,6 +19,9 @@ export const metadata: Metadata = {
 };
 
 import { UserProvider } from "@/contexts/UserContext";
+import { ToastProvider } from "@/contexts/ToastContext";
+
+import AppShell from "@/components/Layout/AppShell";
 
 export default function RootLayout({
   children,
@@ -29,7 +32,11 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${inter.variable} ${notoSansJP.variable} ${outfit.variable} font-sans antialiased min-h-screen bg-slate-50`}>
         <UserProvider>
-          {children}
+          <ToastProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </ToastProvider>
         </UserProvider>
       </body>
     </html>

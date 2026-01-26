@@ -1,830 +1,757 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Message } from '@/types';
-import Link from 'next/link';
-import {
-  BookOpen,
-  Send,
-  Sparkles,
-  User,
-  Copy,
-  Heart,
-  Check,
-  RefreshCw,
-  LogOut,
-  Plus,
-  MessageSquare,
-  Clock,
-  Cpu,
-  ChevronRight,
-  Settings,
-  FileText
-} from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import MorningRitual from '@/components/MorningRitual';
-import KnowledgeClipModal from '@/components/KnowledgeClipModal';
-import UserSwitcher from '@/components/UserSwitcher'; // Added
-import { useUser } from '@/contexts/UserContext'; // Added
+
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useUser } from '@/contexts/UserContext';
 import {
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-  doc,
-  updateDoc,
-  increment,
-  setDoc
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import VitalityGauge from '@/components/ui/VitalityGauge'; // Added
+    ArrowLeft,
+    TrendingUp,
+    Zap,
+    Heart,
+    Clock,
+    Users,
+    Activity,
+    MessageCircle,
+    ShieldCheck,
+    HelpCircle,
+    LogOut,
+    Plus,
+    Flame,
+    Eye,
+    Star,
+    Bell,
+    ArrowRight,
+    Leaf
+} from 'lucide-react';
+import KnowledgeRequestModal from '@/components/KnowledgeRequestModal';
+import ForestVitality from '@/components/Admin/ForestVitality';
 
-// --- Types ---
+import { useToast } from '@/contexts/ToastContext';
 
-interface ChatSession {
-  id: string;
-  title: string;
-  updatedAt: any;
-}
-
-// --- Premium UI Components ---
-
-const GlassButton = ({ children, variant = "primary", className = "", ...props }: any) => {
-  const baseStyle = "inline-flex items-center justify-center rounded-xl text-xs font-bold transition-all duration-300 disabled:pointer-events-none disabled:opacity-50 h-10 px-5 shadow-sm active:scale-95 tracking-wide";
-  const variants = {
-    primary: "bg-terracotta text-white hover:bg-terracotta-light hover:shadow-glow",
-    secondary: "bg-white/70 backdrop-blur-md text-taupe border border-white/30 hover:bg-white hover:border-white/50",
-    ghost: "hover:bg-taupe/5 text-taupe-light hover:text-taupe",
-    outline: "border border-border bg-transparent hover:bg-white text-taupe"
-  };
-  return (
-    <button className={`${baseStyle} ${variants[variant as keyof typeof variants]} ${className}`} {...props}>
-      {children}
-    </button>
-  );
-};
-
-const QuotaMeter = ({ current, total, label }: any) => {
-  const isInfinite = total === "無制限";
-  const percentage = isInfinite ? 5 : Math.min((current / (typeof total === 'number' ? total : 1)) * 100, 100);
-
-  return (
-    <div className="flex-1 min-w-[40px]">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[8px] font-black text-taupe-light/50 tracking-tighter uppercase">{label}</span>
-      </div>
-      <div className="h-1 bg-taupe/5 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-taupe/20 transition-all duration-1000"
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+// --- Premium Component ---
+const PremiumCard = ({ children, className = "", onClick }: { children: React.ReactNode, className?: string, onClick?: () => void }) => (
+    <div onClick={onClick} className={`bg-card rounded-3xl shadow-premium p-8 ${className}`}>
+        {children}
     </div>
-  );
-};
-
-const ModelCard = ({ id, active, onClick, quotas }: any) => (
-  <button
-    onClick={onClick}
-    className={`group relative flex flex-col p-4 rounded-2xl transition-all duration-500 text-left border ${active
-      ? 'bg-white border-white shadow-premium ring-1 ring-terracotta/5'
-      : 'bg-transparent border-transparent hover:bg-white/40'
-      }`}
-  >
-    <div className="flex items-center gap-2 mb-3">
-      <div className={`p-1.5 rounded-lg transition-colors ${active ? 'bg-terracotta text-white' : 'bg-taupe/5 text-taupe-light group-hover:bg-taupe/10'}`}>
-        <Cpu size={14} />
-      </div>
-      <span className={`text-xs font-bold tracking-tight ${active ? 'text-taupe' : 'text-taupe-light'}`}>
-        {id}
-      </span>
-    </div>
-
-    <div className="flex gap-2 w-full">
-      <QuotaMeter label="RPM" current={quotas.rpm} total={quotas.rpmTotal} />
-      <QuotaMeter label="TPM" current={quotas.tpm} total={quotas.tpmTotal} />
-    </div>
-
-    {active && (
-      <div className="absolute top-3 right-3 h-1.5 w-1.5 rounded-full bg-terracotta shadow-glow" />
-    )}
-  </button>
 );
 
-const ChatMessage = ({ message, onLike, onAction }: { message: Message, onLike?: (id: string) => void, onAction: (type: string, id: string) => void }) => {
-  const { user } = useUser(); // Hook to get current role/mentorMode
-  const isUser = message.role === 'user';
+// --- Engagement Page ---
+export default function EngagementPage() {
+    const { user } = useUser(); // Use Context
+    const { showSuccess } = useToast();
+    const [isLoading, setIsLoading] = useState(false);
 
-  if (!isUser) {
-    console.log('[ChatMessage Debug] Message:', message.id, 'Citations:', message.citations);
-  }
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [copied, setCopied] = useState(false);
-  const [activeCitation, setActiveCitation] = useState<any | null>(null);
+    // Data is handled by UserContext
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    // --- WANTED Logic ---
+    const searchParams = useSearchParams();
+    const [activeTab, setActiveTab] = useState<'overview' | 'wanted' | 'favorites' | 'notifications'>('overview');
 
-  if (isUser) {
-    return (
-      <div className={`flex w-full mb-10 justify-end animate-in fade-in slide-in-from-bottom-2 duration-700`}>
-        <div className={`max-w-[80%] group relative`}>
-          <div className="bg-gradient-to-tr from-terracotta to-terracotta-light text-white px-6 py-4 rounded-[2rem] rounded-tr-lg text-sm font-medium shadow-premium leading-relaxed tracking-wide">
-            {message.content}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex w-full mb-12 justify-start animate-in fade-in slide-in-from-bottom-2 duration-700`}>
-      <div className="flex-shrink-0 mr-4">
-        <div className="h-9 w-9 rounded-2xl border border-white bg-white shadow-premium overflow-hidden">
-          <img src="/Mr.OWL.jpg" alt="AI" className="w-full h-full object-cover" />
-        </div>
-      </div>
-      <div className={`max-w-[85%] pt-1 group relative`}>
-        <div className="flex flex-col gap-2">
-          <div className="text-taupe text-[15px] leading-8 font-normal prose prose-slate max-w-none prose-p:mb-4 prose-strong:text-terracotta prose-strong:font-bold prose-ul:my-4 prose-table:rounded-xl prose-table:overflow-hidden prose-table:border-0 prose-th:bg-taupe/5 prose-th:text-taupe prose-th:font-bold prose-td:border-b prose-td:border-taupe/5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content}
-            </ReactMarkdown>
-          </div>
-
-          {/* New: Citations Display Section */}
-          {message.citations && message.citations.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {message.citations.map((citation: any, idx: number) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveCitation(citation)}
-                  className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-taupe text-[11px] font-bold hover:border-terracotta/50 hover:text-terracotta hover:shadow-sm transition-all text-left max-w-full"
-                >
-                  <BookOpen size={12} className="flex-shrink-0 text-terracotta" />
-                  <span className="truncate max-w-[200px]">{citation.title || "出典"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Action Buttons - Always Visible */}
-          <div className="flex items-center gap-3 mt-4 transition-all duration-300">
-            <button
-              onClick={() => onAction('supplement', message.id)}
-              className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-terracotta/30 text-taupe text-[10px] font-bold shadow-sm hover:shadow-md hover:bg-terracotta/5 transition-all active:scale-95 group/btn"
-            >
-              <Plus size={12} className="text-sage group-hover/btn:text-terracotta transition-colors" />
-              現場の補足を入れる <span className="text-sage font-black text-[9px]">+50pt</span>
-            </button>
-
-            <div className="flex items-center gap-1 ml-2 border-l border-taupe/10 pl-3">
-              <button onClick={handleCopy} className="p-2 text-taupe-light hover:text-terracotta transition-colors rounded-full hover:bg-white" title="コピー">
-                {copied ? <Check size={14} className="text-sage" /> : <Copy size={14} />}
-              </button>
-              <button onClick={() => onLike?.(message.id)} className="p-2 text-taupe-light hover:text-pink-400 transition-colors rounded-full hover:bg-white" title="感謝">
-                <Heart size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Internal Citation Viewer Modal for this message */}
-      {activeCitation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setActiveCitation(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-in zoom-in-50 duration-200" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-terracotta/10 rounded-lg text-terracotta">
-                  <BookOpen size={20} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-taupe text-sm">参照ドキュメント</h4>
-                  <p className="text-xs text-taupe-light">{activeCitation.title}</p>
-                </div>
-              </div>
-              <button onClick={() => setActiveCitation(null)} className="p-1 hover:bg-slate-100 rounded-full">
-                <LogOut size={16} className="text-slate-400" />
-              </button>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-taupe leading-relaxed max-h-[60vh] overflow-y-auto custom-scrollbar whitespace-pre-wrap font-medium">
-              {(() => {
-                const content = activeCitation.text || activeCitation.contentSnippet || activeCitation.content || "内容が表示できません";
-                // Strip HTML tags and decode entities
-                return content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-              })()}
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-              <a
-                href={`/api/files/proxy?name=${encodeURIComponent(activeCitation.fileName || activeCitation.title || '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-2"
-              >
-                <FileText size={14} />
-                ファイルを開く
-              </a>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button onClick={() => setActiveCitation(null)} className="px-4 py-2 bg-slate-100 text-taupe text-xs font-bold rounded-lg hover:bg-slate-200">
-                閉じる
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ChatInput = ({ onSendMessage, disabled }: { onSendMessage: (text: string) => void, disabled: boolean }) => {
-  const [input, setInput] = useState('');
-  const [isComposing, setIsComposing] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-    }
-  }, [input]);
-
-  const handleSend = () => {
-    if (!input.trim() || disabled) return;
-    onSendMessage(input);
-    setInput('');
-  };
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 p-8 z-30 flex justify-center pointer-events-none">
-      <div className="w-full max-w-3xl pointer-events-auto">
-        <div className="bg-white/80 backdrop-blur-2xl p-2 rounded-[2.5rem] shadow-premium border border-white/50 flex items-end gap-2 group focus-within:ring-2 focus-within:ring-terracotta/10 transition-all duration-500">
-          <div className="p-4 mb-1 text-terracotta/40">
-            <Sparkles size={20} />
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            placeholder="OWLくんに質問する..."
-            className="flex-1 bg-transparent border-0 focus:ring-0 text-taupe text-sm py-4 max-h-[180px] resize-none overflow-y-auto custom-scrollbar placeholder:text-taupe-light/50 font-medium"
-            rows={1}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || disabled}
-            className="mb-1 mr-1 h-12 w-12 flex items-center justify-center rounded-full bg-terracotta text-white hover:bg-terracotta-light disabled:opacity-20 transition-all duration-300 shadow-lg active:scale-90"
-          >
-            <Send size={20} />
-          </button>
-        </div>
-        <p className="text-center text-[9px] font-bold text-taupe-light/40 mt-3 tracking-widest">
-          この会話は3日後にナレッジとして自動公開されます　<button className="underline hover:text-terracotta transition-colors">拒否する</button>
-        </p>
-      </div>
-    </div>
-  );
-};
-
-// --- Main SaaS Page ---
-
-export default function SaaSPage() {
-  const { user } = useUser(); // Use Context
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // History State
-  const [history, setHistory] = useState<ChatSession[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-
-  // Model State
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
-  const [quotas, setQuotas] = useState({
-    'gemini-2.5-flash': { rpm: 2, rpmTotal: 1000, tpm: 117.67, tpmTotal: 1000, rpd: 24, rpdTotal: 10000 },
-    'gemini-2.0-flash': { rpm: 3, rpmTotal: 2000, tpm: 1.56, tpmTotal: 4000, rpd: 13, rpdTotal: "無制限" }
-  });
-
-  // Modal & Points
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [targetMessageId, setTargetMessageId] = useState<string>('');
-  const [pointAnim, setPointAnim] = useState<{ x: number, y: number, text: string } | null>(null);
-
-  const handleAction = (type: string, id: string) => {
-    if (type === 'supplement') {
-      setTargetMessageId(id);
-      setIsModalOpen(true);
-    }
-  };
-
-  const handleHeart = async (id: string) => {
-    // 1. Animation (+5)
-    setPointAnim({ x: window.innerWidth / 2, y: window.innerHeight / 2, text: '+5' });
-    setTimeout(() => setPointAnim(null), 2000);
-
-    // 2. Attribution for Cited Knowledge (New)
-    const msg = messages.find(m => m.id === id);
-    if (msg?.citations) {
-      // Collect all unique user IDs to credit (author + contributors)
-      const creditUserIds = new Set<string>();
-
-      msg.citations.forEach(c => {
-        if (c.authorId) creditUserIds.add(c.authorId);
-        if (c.contributors && Array.isArray(c.contributors)) {
-          c.contributors.forEach((uid: string) => creditUserIds.add(uid));
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && ['overview', 'wanted', 'favorites', 'notifications'].includes(tab)) {
+            setActiveTab(tab as any);
         }
-      });
+    }, [searchParams]);
 
-      const uniqueAuthorIds = Array.from(creditUserIds);
+    const [wantedList, setWantedList] = useState<any[]>([]);
+    const [filter, setFilter] = useState<'all' | 'urgent' | 'normal'>('all');
+    const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-      for (const authorId of uniqueAuthorIds) {
-        if (typeof authorId === 'string' && authorId !== user.id) { // Don't credit self for liking own clip usage? Or do? Usually self-like is ignored but here it's AI usage.
-          // However, if I am the author of the clip, and the AI used it, and I like the AI message, I technically get points? 
-          // Let's allow it for now as "Thanks for using my knowledge".
-          const authorRef = doc(db, 'users', authorId);
-          await updateDoc(authorRef, {
-            points: increment(10),
-            thanksCount: increment(1)
-          });
+    const [notifications, setNotifications] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (activeTab === 'notifications') {
+            fetchNotifications();
+        } else if (activeTab !== 'overview') {
+            fetchWantedList();
         }
-      }
-    }
+    }, [activeTab]);
 
-    // 3. Firestore (Current User)
-    const statsRef = doc(db, 'users', user.id, 'stats', 'total');
-    await setDoc(statsRef, {
-      points: increment(5),
-      heartsGiven: increment(1)
-    }, { merge: true });
-
-    // 3.5 Sync to Main User Doc for Real-time Display
-    await updateDoc(doc(db, 'users', user.id), { points: increment(5) });
-
-    // 4. Recover OWL Point (Stamina)
-    if (!user.mentorMode) {
-      const newStamina = Math.min(200, user.stamina + 5);
-      if (newStamina !== user.stamina) {
-        await updateDoc(doc(db, 'users', user.id), { stamina: newStamina });
-      }
-    }
-  };
-
-  const handleModalSubmit = async (data: any) => {
-    // 1. Animation (+50)
-    setPointAnim({ x: window.innerWidth / 2, y: window.innerHeight / 2, text: '+50' });
-    setTimeout(() => setPointAnim(null), 2500);
-
-    // Map Author Name to ID (for attribution)
-    const AUTHOR_ID_MAP: { [key: string]: string } = {
-      'self': user.id,
-      'sato': 'sato_02',
-      'yamada': 'tanaka_03',
+    const fetchNotifications = async () => {
+        try {
+            const res = await fetch(`/api/notifications?userId=${user.id}`);
+            const data = await res.json();
+            setNotifications(data.notifications || []);
+        } catch (e) {
+            console.error(e);
+        }
     };
-    const authorId = AUTHOR_ID_MAP[data.author] || user.id;
 
-    // 2. Firestore: Save Knowledge
-    await addDoc(collection(db, 'knowledge'), {
-      content: data.memo,
-      tags: data.tag ? [data.tag] : [],
-      author: data.author === 'self' ? user.name : data.author,
-      authorId: authorId, // Save ID for future attribution
-      relatedMessageId: data.relatedMessage || null,
-      points: 50,
-      createdAt: serverTimestamp()
-    });
-
-    // 3. Firestore: Update Points
-    const statsRef = doc(db, 'users', user.id, 'stats', 'total');
-    await setDoc(statsRef, {
-      points: increment(50),
-      knowledgeCount: increment(1)
-    }, { merge: true });
-
-    // 3.5 Sync to Main User Doc for Real-time Display
-    await updateDoc(doc(db, 'users', user.id), {
-      points: increment(50),
-      timeSaved: increment(5) // Each clip saves 5 mins
-    });
-
-    // 4. Recover OWL Point (Stamina)
-    if (!user.mentorMode) {
-      const newStamina = Math.min(200, user.stamina + 50);
-      if (newStamina !== user.stamina) {
-        await updateDoc(doc(db, 'users', user.id), { stamina: newStamina });
-      }
-    }
-
-    // 5. Proxy Thanks Bonus (Engagement)
-    if (data.author && data.author !== 'self') {
-      const targetId = AUTHOR_ID_MAP[data.author];
-      if (targetId) {
+    const markAsRead = async (id: string) => {
         try {
-          const targetRef = doc(db, 'users', targetId);
-          const targetStatsRef = doc(db, 'users', targetId, 'stats', 'total');
+            await fetch(`/api/notifications?id=${id}`, { method: 'PATCH' });
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+        } catch (e) { /* ignore */ }
+    };
 
-          await updateDoc(targetRef, {
-            points: increment(10),
-            thanksCount: increment(1)
-          });
-          await setDoc(targetStatsRef, {
-            points: increment(10),
-            thanksCount: increment(1)
-          }, { merge: true });
+    // Client-side Sort & Filter
+    const filteredList = activeTab === 'notifications' ? [] : wantedList.filter(req => {
+        let sd = req.structured_data || {};
+        if (typeof sd === 'string') { try { sd = JSON.parse(sd); } catch (e) { } }
+        sd = sd || {};
 
-          console.log(`Gave 10pt proxy bonus to ${targetId}`);
-        } catch (e) {
-          console.error("Failed to give proxy bonus", e);
+        // Tab Filter
+        if (activeTab === 'favorites') {
+            const favs = sd.favorites || [];
+            if (!favs.includes(user.id)) return false;
         }
-      }
-    }
-  };
-  // 1. Load History
-  useEffect(() => {
-    const q = query(
-      collection(db, 'users', user.id, 'chats'),
-      orderBy('updatedAt', 'desc')
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const chats = snapshot.docs.map(doc => ({
-        id: doc.id,
-        title: doc.data().title || '新しいチャット',
-        updatedAt: doc.data().updatedAt
-      }));
-      setHistory(chats);
-    });
-    return () => unsubscribe();
-  }, [user.id]);
 
-  // 2. Load Messages for Active Chat
-  useEffect(() => {
-    if (!activeChatId) {
-      setMessages([
-        { id: 'welcome', role: 'assistant', content: '# Welcome to OWLight\n業務に関する質問やマニュアルの検索を、直感的なAIエージェントがお手伝いします。' }
-      ]);
-      return;
-    }
+        const p = sd.priority || 'normal';
+        if (filter === 'urgent') return p === 'urgent';
+        if (filter === 'normal') return p !== 'urgent';
+        return true;
+    }).sort((a, b) => {
+        let sdA = a.structured_data || {};
+        let sdB = b.structured_data || {};
+        if (typeof sdA === 'string') { try { sdA = JSON.parse(sdA); } catch (e) { } }
+        if (typeof sdB === 'string') { try { sdB = JSON.parse(sdB); } catch (e) { } }
+        sdA = sdA || {};
+        sdB = sdB || {};
 
-    const q = query(
-      collection(db, 'users', user.id, 'chats', activeChatId, 'messages'),
-      orderBy('createdAt', 'asc')
-    );
+        // 1. Priority
+        const pA = sdA.priority === 'urgent';
+        const pB = sdB.priority === 'urgent';
+        if (pA && !pB) return -1;
+        if (!pA && pB) return 1;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        role: doc.data().role,
-        content: doc.data().content,
-        citations: doc.data().citations || [] // Include citations
-      })) as Message[];
-
-      if (msgs.length === 0) {
-        setMessages([]);
-      } else {
-        setMessages(msgs);
-      }
+        // 2. Me Too
+        return (sdB.me_too_count || 0) - (sdA.me_too_count || 0);
     });
 
-    return () => unsubscribe();
-  }, [activeChatId, user.id]);
-
-  // Auto-scroll
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isSending]);
-
-  const startNewChat = () => {
-    setActiveChatId(null);
-  };
-
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isSending) return;
-    setIsSending(true);
-
-    let chatId = activeChatId;
-
-    try {
-      if (!chatId) {
-        const chatRef = await addDoc(collection(db, 'users', user.id, 'chats'), {
-          title: text.slice(0, 15) + (text.length > 15 ? '...' : ''),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        chatId = chatRef.id;
-        setActiveChatId(chatId);
-      } else {
-        const chatRef = doc(db, 'users', user.id, 'chats', chatId);
-        await updateDoc(chatRef, { updatedAt: serverTimestamp() });
-      }
-
-      await addDoc(collection(db, 'users', user.id, 'chats', chatId, 'messages'), {
-        role: 'user',
-        content: text,
-        createdAt: serverTimestamp()
-      });
-
-      // --- Stamina Consumption Logic ---
-      let currentStamina = user.stamina;
-
-      if (!user.mentorMode) {
-        const newStamina = Math.max(0, user.stamina - 10);
-        currentStamina = newStamina;
+    const fetchWantedList = async () => {
         try {
-          // Direct update for immediate effect (Context will catch it via onSnapshot)
-          const userRef = doc(db, 'users', user.id);
-          await updateDoc(userRef, {
-            stamina: newStamina,
-            timeSaved: increment(1) // Each chat saves 1 min
-          });
+            const res = await fetch('/api/wanted');
+            const data = await res.json();
+            setWantedList(data.requests || []);
         } catch (e) {
-          console.error("Failed to consume stamina", e);
+            console.error(e);
         }
-      }
+    };
 
-      // Prepare Messages
-      const apiMessages = [...messages.filter(m => m.id !== 'welcome'), { role: 'user', content: text }]
-        .map(m => ({ role: m.role, content: m.content }));
+    const handleAction = async (requestId: string, action: 'view' | 'favorite' | 'subscribe') => {
+        // Optimistic Update
+        setWantedList(prev => prev.map(req => {
+            if (req.id !== requestId) return req;
+            let sd = req.structured_data || {};
+            if (typeof sd === 'string') { try { sd = JSON.parse(sd); } catch (e) { } }
+            sd = sd || {};
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: apiMessages,
-          model: selectedModel,
-          mentorMode: user.mentorMode || false,
-          stamina: currentStamina
-        }),
-      });
+            let updates = {};
+            if (action === 'view') {
+                updates = { view_count: (sd.view_count || 0) + 1 };
+            } else if (action === 'favorite') {
+                const favs = sd.favorites || [];
+                updates = { favorites: favs.includes(user.id) ? favs.filter((u: string) => u !== user.id) : [...favs, user.id] };
+            } else if (action === 'subscribe') {
+                const subs = sd.subscribers || [];
+                updates = { subscribers: subs.includes(user.id) ? subs.filter((u: string) => u !== user.id) : [...subs, user.id] };
+            }
+            return { ...req, structured_data: { ...sd, ...updates } };
+        }));
 
-      if (!response.ok) throw new Error('API Error');
-      const data = await response.json();
-
-      await addDoc(collection(db, 'users', user.id, 'chats', chatId, 'messages'), {
-        role: 'assistant',
-        content: data.reply || "No response.",
-        citations: [...(data.citiedKnowledge || []), ...(data.vertexCitations || [])], // Save both knowledge and vertex citations
-        createdAt: serverTimestamp()
-      });
-
-    } catch (error) {
-      console.error(error);
-      if (chatId) {
-        await addDoc(collection(db, 'users', user.id, 'chats', chatId, 'messages'), {
-          role: 'assistant',
-          content: "現在オフラインか、接続エラーが発生しています。",
-          createdAt: serverTimestamp()
+        await fetch('/api/wanted', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: requestId, action, userId: user.id })
         });
-      }
-    } finally {
-      setIsSending(false);
-    }
-  };
+    };
 
-  return (
-    <div className="h-screen bg-background flex flex-col font-sans overflow-hidden antialiased">
-      <MorningRitual />
+    const toggleExpand = (id: string) => {
+        if (expandedCardId !== id) {
+            handleAction(id, 'view'); // Count view on expand
+            setExpandedCardId(id);
+        } else {
+            setExpandedCardId(null);
+        }
+    };
 
-      {/* Premium Navbar */}
-      <header className="sticky top-0 z-40 h-16 bg-white/70 backdrop-blur-xl border-b border-white/20 px-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 rounded-2xl bg-white shadow-premium flex items-center justify-center border border-white p-0.5">
-            <img src="/Mr.OWL.jpg" alt="Logo" className="w-full h-full object-cover rounded-[0.8rem]" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-taupe text-lg tracking-tight leading-none mb-1">OWLight</span>
-            <span className="text-[8px] font-black text-taupe-light/50 tracking-[0.2em] uppercase">自治体専用生成AI基盤</span>
-          </div>
-        </div>
+    const handleMeToo = async (requestId: string) => {
+        try {
+            // Optimistic Update
+            setWantedList(prev => prev.map(req => {
+                if (req.id === requestId) {
+                    let sd = req.structured_data;
+                    if (typeof sd === 'string') {
+                        try { sd = JSON.parse(sd); } catch (e) { sd = {}; }
+                    }
+                    sd = sd || {};
 
-        <div className="flex items-center gap-2">
-          <nav className="flex items-center gap-1 bg-taupe/5 p-1 rounded-xl mr-4">
-            <Link href="/search">
-              <GlassButton variant="ghost" className="h-8 px-3 text-[10px] uppercase tracking-widest">ナレッジ検索</GlassButton>
-            </Link>
-            <Link href="/admin/files">
-              <GlassButton variant="ghost" className="h-8 px-3 text-[10px] uppercase tracking-widest">ファイル管理</GlassButton>
-            </Link>
-            <Link href="/admin/users">
-              <GlassButton variant="ghost" className="h-8 px-3 text-[10px] uppercase tracking-widest">ユーザー管理</GlassButton>
-            </Link>
-          </nav>
+                    return {
+                        ...req,
+                        structured_data: {
+                            ...sd,
+                            me_too_count: (sd.me_too_count || 0) + 1,
+                            me_too_users: [...(sd.me_too_users || []), user.id]
+                        }
+                    };
+                }
+                return req;
+            }));
 
-          <div className="flex items-center gap-3 border-l border-taupe/10 pl-4">
-            <div className="mr-2">
-              <VitalityGauge
-                value={user.stamina > 1000 ? 100 : user.stamina}
-                max={200}
-                isInfinite={user.stamina > 1000}
-                label="OWL Point"
-              />
-            </div>
-            <UserSwitcher />
-            <button
-              onClick={() => { localStorage.removeItem('lastMorningRitual'); window.location.reload(); }}
-              className="p-2 text-taupe-light hover:text-terracotta transition-colors"
-              title="儀式リセット"
-            >
-              <RefreshCw size={16} />
-            </button>
-            <Link href="/engagement">
-              <div className="h-9 w-9 rounded-full bg-white shadow-premium border border-white flex items-center justify-center text-terracotta hover:scale-110 transition-transform cursor-pointer">
-                <User size={18} />
-              </div>
-            </Link>
-            <Link href="/closing">
-              <button
-                className="p-2 text-taupe-light hover:text-terracotta transition-colors"
-                title="業務終了 (ログオフ)"
-              >
-                <LogOut size={16} />
-              </button>
-            </Link>
-          </div>
-        </div>
-      </header>
+            // API Call
+            await fetch('/api/wanted', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: requestId, action: 'me_too', userId: user.id })
+            });
 
-      {/* Content Layout */}
-      <main className="flex-1 flex w-full max-w-7xl mx-auto min-h-0">
+            // Award Points for empathy
+            await fetch('/api/points', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'awardPoints', targetUserIds: [user.id], points: 10, thanks: 0 })
+            });
 
-        {/* Left Sidebar: Reordered & Scrollable */}
-        <aside className="w-72 bg-transparent border-r border-taupe/5 hidden lg:flex flex-col overflow-y-auto custom-scrollbar">
-          <div className="p-6 space-y-8">
+        } catch (e) {
+            console.error('Me Too failed', e);
+            fetchWantedList(); // Revert on error
+        }
+    };
 
-            {/* 1. Settings */}
-            <Link href="/admin/prompts" className="flex items-center justify-between p-3 rounded-xl hover:bg-white transition-colors group border border-transparent hover:border-taupe/5">
-              <span className="text-xs font-bold text-taupe-light group-hover:text-taupe">システムプロンプト設定</span>
-              <ChevronRight size={14} className="text-taupe-light/30" />
-            </Link>
+    const [submissionModalState, setSubmissionModalState] = useState<{
+        isOpen: boolean;
+        requestId: string | null;
+        initialTitle: string;
+        initialContent: string;
+    }>({
+        isOpen: false,
+        requestId: null,
+        initialTitle: '',
+        initialContent: ''
+    });
 
-            {/* 2. Models Section */}
-            <div>
-              <h3 className="text-[10px] font-black text-taupe-light/40 uppercase tracking-[0.2em] mb-4">AIモデル・リソース</h3>
-              <div className="flex flex-col gap-2">
-                {Object.entries(quotas).map(([id, q]) => (
-                  <ModelCard
-                    key={id}
-                    id={id}
-                    active={selectedModel === id}
-                    onClick={() => setSelectedModel(id)}
-                    quotas={q}
-                  />
-                ))}
-              </div>
-            </div>
+    const handleResolve = async (requestId: string, knowledgeId?: string) => {
+        if (!knowledgeId) {
+            // Should not happen in new flow, but keep as fallback or dev mode
+            if (!confirm('このWANTEDを解決済みにしますか？')) return;
+        }
 
-            {/* 3. New Chat & History Section */}
-            <div>
-              <button
-                onClick={startNewChat}
-                className="flex items-center justify-center gap-2 w-full py-4 bg-terracotta text-white rounded-2xl font-bold shadow-lg hover:bg-terracotta-light transition-all active:scale-95 mb-6"
-              >
-                <Plus size={18} />
-                <span>新しいチャット</span>
-              </button>
+        try {
+            // Optimistic Update: Remove from list
+            setWantedList(prev => prev.filter(req => req.id !== requestId));
 
-              <h3 className="text-[10px] font-black text-taupe-light/40 uppercase tracking-[0.2em] mb-4 pl-2">履歴</h3>
-              <div className="space-y-2">
-                {history.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => setActiveChatId(chat.id)}
-                    className={`w-full text-left p-4 rounded-2xl transition-all duration-300 group relative overflow-hidden ${activeChatId === chat.id
-                      ? 'bg-white shadow-premium border border-white'
-                      : 'hover:bg-white/40 border border-transparent'
-                      }`}
-                  >
-                    <div className="flex items-start gap-3 relative z-10">
-                      <MessageSquare size={16} className={`mt-0.5 ${activeChatId === chat.id ? 'text-terracotta' : 'text-taupe-light'}`} />
-                      <div className="flex-1 min-w-0">
-                        <h4 className={`text-xs font-bold truncate mb-1 ${activeChatId === chat.id ? 'text-taupe' : 'text-taupe-light group-hover:text-taupe'}`}>
-                          {chat.title}
-                        </h4>
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-taupe-light/40 uppercase">
-                          <Clock size={10} />
-                          {chat.updatedAt?.toDate ? chat.updatedAt.toDate().toLocaleDateString() : 'Just now'}
-                        </div>
-                      </div>
+            await fetch('/api/wanted', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: requestId,
+                    action: 'resolve',
+                    userId: user.id,
+                    knowledgeId: knowledgeId // Link if available
+                })
+            });
+
+            if (knowledgeId) {
+                // Already handled in modal callback
+            } else {
+                showSuccess('WANTED解決', 'あなたの貢献が組織の知恵になりました。ありがとうございます！');
+            }
+
+        } catch (e) {
+            console.error(e);
+            fetchWantedList();
+        }
+    };
+
+    // --- Draw Network (Modern Minimal) ---
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = canvas.parentElement?.clientWidth || 300;
+        canvas.height = 240;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const center = { x: canvas.width / 2, y: canvas.height / 2 };
+        const others = [
+            { a: 0.1, r: 80 }, { a: 1.5, r: 90 }, { a: 3.2, r: 75 }, { a: 4.8, r: 85 }
+        ];
+
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(141, 166, 119, 0.2)';
+        others.forEach(o => {
+            const x = center.x + Math.cos(o.a) * o.r;
+            const y = center.y + Math.sin(o.a) * o.r;
+            ctx.beginPath();
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(141, 166, 119, 0.1)';
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#B35E3F';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = 'rgba(179, 94, 63, 0.4)';
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+    }, [isLoading]);
+
+    return (
+        <div className="min-h-screen bg-background flex flex-col font-sans pb-20 overflow-x-hidden text-foreground">
+            <Suspense fallback={null}>
+                <MorningRitual />
+            </Suspense>
+
+            <main className="max-w-7xl mx-auto px-8 py-8 space-y-12">
+
+                {/* --- Stats / Tab Switcher --- */}
+                <div className="flex items-center justify-center mb-8">
+                    <div className="bg-card/50 backdrop-blur-sm p-1 rounded-full shadow-sm flex gap-1">
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`px-6 py-2 rounded-full text-xs font-bold transition-all ${activeTab === 'overview'
+                                ? 'bg-terracotta text-white shadow-md'
+                                : 'text-muted-foreground hover:bg-muted'
+                                }`}
+                        >
+                            概要
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('wanted')}
+                            className={`px-6 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'wanted'
+                                ? 'bg-terracotta text-white shadow-md'
+                                : 'text-taupe-light hover:bg-white/50'
+                                }`}
+                        >
+                            ナレッジ募集
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('favorites')}
+                            className={`px-6 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'favorites'
+                                ? 'bg-terracotta text-white shadow-md'
+                                : 'text-taupe-light hover:bg-white/50'
+                                }`}
+                        >
+                            お気に入り <Star size={12} className={activeTab === 'favorites' ? "fill-white" : ""} />
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('notifications')}
+                            className={`px-6 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'notifications'
+                                ? 'bg-terracotta text-white shadow-md'
+                                : 'text-taupe-light hover:bg-white/50'
+                                }`}
+                        >
+                            履歴 <Bell size={12} className={activeTab === 'notifications' ? "fill-white" : ""} />
+                        </button>
                     </div>
-                  </button>
-                ))}
-                {history.length === 0 && (
-                  <div className="text-center py-10 text-taupe-light/30 text-xs font-bold">
-                    履歴はありません
-                  </div>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </aside>
-
-        {/* Center: Chat Area */}
-        <section className="flex-1 flex flex-col min-w-0 bg-white/30">
-          <div className="flex-1 overflow-y-auto px-6 py-12 sm:px-12 lg:px-24 pb-40 custom-scrollbar">
-            {messages.length > 0 && messages.map((msg, i) => (
-              <ChatMessage
-                key={msg.id || i}
-                message={msg}
-                onAction={handleAction}
-                onLike={handleHeart}
-              />
-            ))}
-            {isSending && (
-              <div className="flex items-center gap-4 animate-pulse mb-8">
-                <div className="h-8 w-8 rounded-full bg-terracotta/5 flex items-center justify-center border border-terracotta/20">
-                  <div className="h-2 w-2 bg-terracotta rounded-full"></div>
                 </div>
-                <span className="text-[10px] font-black text-terracotta tracking-[0.3em] uppercase">思考中...</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </section>
 
-      </main>
+                {activeTab === 'overview' ? (
+                    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {/* --- 1. Forest Vitality Hero --- */}
+                        <div className="w-full">
+                            <ForestVitality />
+                        </div>
 
-      <ChatInput onSendMessage={handleSendMessage} disabled={isSending} />
+                        {/* --- 2. Metrics Grid --- */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <PremiumCard className="relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-5"><Zap size={40} /></div>
+                                <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">これまで獲得したOWL Point</span>
+                                <div className="text-6xl font-thin tracking-tighter mb-2">{user.points}</div>
+                                <div className="flex items-center gap-2 text-sage text-xs font-bold">
+                                    <TrendingUp size={14} /> +12.4% <span className="text-taupe-light/50 font-normal">先月比</span>
+                                </div>
+                            </PremiumCard>
 
-      <KnowledgeClipModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSubmit={handleModalSubmit}
-        initialMessage={targetMessageId}
-      />
+                            <PremiumCard className="relative overflow-hidden bg-terracotta/5">
+                                <div className="absolute top-0 right-0 p-4 opacity-10 text-terracotta"><Clock size={40} /></div>
+                                <span className="text-[10px] font-black text-terracotta/60 uppercase tracking-[0.2em] block mb-4">創出された時間 (Time Saved)</span>
+                                <div className="text-6xl font-thin tracking-tighter mb-2 text-terracotta">{user.timeSaved}h</div>
+                                <p className="text-[10px] text-taupe-light font-medium tracking-wide">
+                                    組織全体で創出された「余裕」の時間。
+                                </p>
+                            </PremiumCard>
 
-      {/* Premium Point Animation */}
-      {pointAnim && (
-        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center">
-          <div className="relative animate-burst-in">
-            {/* Shockwave */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-amber-400/30 rounded-full animate-shockwave"></div>
+                            <PremiumCard className="relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-5"><Heart size={40} /></div>
+                                <span className="text-[10px] font-black text-taupe-light/50 uppercase tracking-[0.2em] block mb-4">受け取った感謝</span>
+                                <div className="text-6xl font-thin tracking-tighter mb-2">{user.thanksCount}</div>
+                                <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <div key={i} className="w-1.5 h-1.5 bg-terracotta rounded-full"></div>
+                                    ))}
+                                </div>
+                            </PremiumCard>
+                        </div>
 
-            {/* Main Text */}
-            <div className="relative flex flex-col items-center">
-              <span className="text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-amber-500 to-amber-600 drop-shadow-2xl filter animate-text-pop" style={{ textShadow: '0 4px 30px rgba(245, 158, 11, 0.6)' }}>
-                {pointAnim.text}
-              </span>
-              <span className="text-2xl font-black text-amber-500 tracking-[0.5em] uppercase mt-4 animate-fade-in-up">
-                Points Get
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+                        {/* --- 3. Bottom Sections --- */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
 
-      <style jsx global>{`
-        @keyframes burst-in {
-          0% { transform: scale(0.5); opacity: 0; }
-          40% { transform: scale(1.1); opacity: 1; }
-          60% { transform: scale(1.0); }
-          100% { transform: scale(1.0); opacity: 0; }
-        }
-        @keyframes shockwave {
-          0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
-        }
-        @keyframes text-pop {
-          0% { transform: translateY(20px); letter-spacing: -0.1em; }
-          100% { transform: translateY(0); letter-spacing: normal; }
-        }
-        @keyframes fade-in-up {
-          0% { transform: translateY(10px); opacity: 0; }
-          100% { transform: translateY(0); opacity: 1; }
-        }
-        .animate-burst-in {
-          animation: burst-in 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .animate-shockwave {
-          animation: shockwave 1.5s ease-out forwards;
-        }
-        .animate-text-pop {
-          animation: text-pop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-        }
-        .animate-fade-in-up {
-          animation: fade-in-up 0.5s ease-out 0.3s forwards;
-          opacity: 0; /* start hidden */
-        }
-        .shadow-premium {
-          box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05), 0 4px 10px -5px rgba(0, 0, 0, 0.03);
-        }
-        .shadow-glow {
-          box-shadow: 0 0 20px rgba(179, 94, 63, 0.2);
-        }
-      `}</style>
-    </div>
-  );
+                            {/* Activity Feed (Reaction Stream) */}
+                            <div className="space-y-6">
+                                <h3 className="text-sm font-bold text-taupe flex items-center gap-2">
+                                    <Bell size={16} className="text-taupe-light" />
+                                    最近届いたリアクション
+                                </h3>
+                                <div className="space-y-4">
+                                    {/* 1. Knowledge Used (Shield) */}
+                                    <div className="flex gap-4 items-start p-6 bg-amber-50/50 rounded-[1.5rem] border-l-4 border-amber-400 hover:shadow-md transition-all">
+                                        <div className="p-3 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                                            <ShieldCheck size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-taupe mb-1">あなたのナレッジが誰かの役に立ちました</h4>
+                                            <p className="text-xs text-taupe-light leading-relaxed">
+                                                あなたのナレッジが、本日1件のリスクをブロックしました。
+                                            </p>
+                                            <span className="text-[10px] font-bold text-taupe-light/40 mt-2 block">30分前</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Help Needed (Ghost/Dropout) - BRAND NEW */}
+                                    <div className="flex gap-4 items-start p-6 bg-purple-50/50 rounded-[1.5rem] border-l-4 border-purple-400 hover:shadow-md transition-all group cursor-pointer relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                            <HelpCircle size={60} className="text-purple-500" />
+                                        </div>
+                                        <div className="p-3 rounded-full bg-purple-100 text-purple-600 shrink-0 relative z-10">
+                                            <span className="text-xl">👻</span>
+                                        </div>
+                                        <div className="relative z-10">
+                                            <h4 className="text-sm font-bold text-purple-900 mb-1">助けが必要です</h4>
+                                            <p className="text-xs text-purple-800/80 leading-relaxed mb-3">
+                                                誰かが<span className="font-bold underline">「児童手当 特例」</span>を検索しましたが、答えが見つからず離脱しました。
+                                            </p>
+                                            <button className="flex items-center gap-1 text-[10px] font-bold bg-white/80 text-purple-700 px-3 py-1.5 rounded-full shadow-sm hover:bg-white hover:scale-105 transition-all">
+                                                <span>知恵を貸す (+50pt)</span>
+                                                <ArrowRight size={10} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 3. Thanks Received */}
+                                    <div className="flex gap-4 items-start p-6 bg-white rounded-[1.5rem] border border-slate-100 hover:shadow-md transition-all">
+                                        <div className="p-3 rounded-full bg-terracotta/10 text-terracotta shrink-0">
+                                            <Heart size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-taupe mb-1">佐藤 (市民課) さんから「感謝」が届きました</h4>
+                                            <p className="text-xs text-taupe-light leading-relaxed mb-1">
+                                                理由: 思考プロセスが明確で参考になった
+                                            </p>
+                                            <span className="text-[10px] font-bold text-taupe-light/40">2分前</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 4. Viewed */}
+                                    <div className="flex gap-4 items-start p-6 bg-white rounded-[1.5rem] border border-slate-100 hover:shadow-md transition-all">
+                                        <div className="p-3 rounded-full bg-slate-100 text-slate-500 shrink-0">
+                                            <Eye size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-taupe mb-1">鈴木 (建設課) さんがあなたの投稿を閲覧しました</h4>
+                                            <p className="text-xs text-taupe-light leading-relaxed mb-1">
+                                                記事: 「検査合格前の支払リスク」
+                                            </p>
+                                            <span className="text-[10px] font-bold text-taupe-light/40">1時間前</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Network Overlay (Circle of Thanks) */}
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-end">
+                                    <h3 className="text-sm font-bold text-taupe flex items-center gap-2">
+                                        <Users size={16} className="text-taupe-light" />
+                                        感謝の輪
+                                    </h3>
+                                    <span className="text-[10px] text-taupe-light">あなたの知恵が誰に届いたか</span>
+                                </div>
+
+                                <PremiumCard className="relative h-[480px] flex items-center justify-center overflow-hidden bg-slate-50/50">
+                                    {/* Connection Map (SVG + HTML) */}
+                                    <div className="relative w-full h-full flex items-center justify-center">
+                                        {/* Connecting Lines (SVG layer) */}
+                                        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                                            <defs>
+                                                <marker id="arrow" markerWidth="10" markerHeight="10" refX="28" refY="3" orient="auto" markerUnits="strokeWidth">
+                                                    <path d="M0,0 L0,6 L9,3 z" fill="#D4C5B8" />
+                                                </marker>
+                                            </defs>
+                                            {/* Lines to nodes */}
+                                            <g stroke="#E5E0DC" strokeWidth="2">
+                                                <line x1="50%" y1="50%" x2="50%" y2="20%" />{/* Top: Watanabe */}
+                                                <line x1="50%" y1="50%" x2="80%" y2="50%" />{/* Right: Tanaka */}
+                                                <line x1="50%" y1="50%" x2="65%" y2="80%" />{/* Bottom Right: Suzuki */}
+                                                <line x1="50%" y1="50%" x2="35%" y2="80%" />{/* Bottom Left: Sato */}
+                                                <line x1="50%" y1="50%" x2="25%" y2="40%" />{/* Left: Ito */}
+                                            </g>
+                                        </svg>
+
+                                        {/* Center Node (You) */}
+                                        <div className="absolute z-10 w-24 h-24 bg-white rounded-full border-4 border-terracotta shadow-xl flex flex-col items-center justify-center animate-[pulse_4s_infinite]">
+                                            <span className="text-xs font-bold text-taupe">あなた</span>
+                                            <span className="text-[9px] text-terracotta font-black mt-1">LV.42</span>
+                                        </div>
+
+                                        {/* Surrounding Nodes */}
+                                        {/* Top: Watanabe */}
+                                        <div className="absolute top-[20%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full border-2 border-sage/50 shadow-md flex items-center justify-center hover:scale-110 transition-transform cursor-pointer group">
+                                            <span className="text-[10px] font-bold text-taupe">渡辺</span>
+                                            <div className="absolute -top-8 bg-sage text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">感謝 +2</div>
+                                        </div>
+
+                                        {/* Right: Tanaka */}
+                                        <div className="absolute top-1/2 right-[20%] translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full border-2 border-sage/50 shadow-md flex items-center justify-center hover:scale-110 transition-transform cursor-pointer group">
+                                            <span className="text-[10px] font-bold text-taupe">田中</span>
+                                        </div>
+
+                                        {/* Bottom Right: Suzuki */}
+                                        <div className="absolute bottom-[20%] right-[35%] translate-x-1/2 translate-y-1/2 w-16 h-16 bg-white rounded-full border-2 border-sage/50 shadow-md flex items-center justify-center hover:scale-110 transition-transform cursor-pointer group">
+                                            <span className="text-[10px] font-bold text-taupe">鈴木</span>
+                                        </div>
+
+                                        {/* Bottom Left: Sato (Key person) */}
+                                        <div className="absolute bottom-[20%] left-[35%] -translate-x-1/2 translate-y-1/2 w-16 h-16 bg-white rounded-full border-2 border-sage/50 shadow-md flex items-center justify-center hover:scale-110 transition-transform cursor-pointer group">
+                                            <span className="text-[10px] font-bold text-taupe">佐藤</span>
+                                            <Heart size={12} className="absolute -top-1 -right-1 text-terracotta bg-white rounded-full fill-terracotta" />
+                                        </div>
+
+                                        {/* Left: Ito */}
+                                        <div className="absolute top-[40%] left-[25%] -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full border-2 border-sage/50 shadow-md flex items-center justify-center hover:scale-110 transition-transform cursor-pointer group">
+                                            <span className="text-[10px] font-bold text-taupe">伊藤</span>
+                                        </div>
+                                    </div>
+                                </PremiumCard>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    /* --- WANTED TAB CONTENT --- */
+                    /* --- WANTED TAB CONTENT --- */
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+                        {/* Filter & New Request Header */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                            {activeTab === 'wanted' ? (
+                                <div className="flex gap-2 bg-slate-100/50 p-1 rounded-lg w-fit">
+                                    {[
+                                        { id: 'all', label: 'すべて' },
+                                        { id: 'urgent', label: '緊急のみ 🔥' },
+                                        { id: 'normal', label: '通常' }
+                                    ].map((f) => (
+                                        <button
+                                            key={f.id}
+                                            onClick={() => setFilter(f.id as any)}
+                                            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filter === f.id ? 'bg-white shadow-sm text-taupe' : 'text-taupe-light hover:bg-white/50'}`}
+                                        >
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : <div />}
+
+                            <div className="flex gap-3">
+                                {/* Buttons Removed */}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* ... Promotion Card ... */}
+                            {/* ... */}
+
+                            {activeTab === 'notifications' ? (
+                                <div className="col-span-full space-y-4">
+                                    {notifications.length === 0 ? (
+                                        <div className="py-20 text-center text-taupe-light">
+                                            <p className="font-bold text-lg mb-2">通知はありません</p>
+                                            <p className="text-xs">平和な一日です。</p>
+                                        </div>
+                                    ) : (
+                                        notifications.map((notif) => (
+                                            <div
+                                                key={notif.id}
+                                                className={`p-6 rounded-2xl border transition-all flex items-start gap-4 cursor-pointer ${notif.isRead ? 'bg-white opacity-60' : 'bg-white border-terracotta/20 shadow-premium'}`}
+                                                onClick={() => markAsRead(notif.id)}
+                                            >
+                                                <div className={`p-2 rounded-lg ${notif.type === 'knowledge_update' ? 'bg-terracotta text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                    <Bell size={20} />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <h4 className="text-sm font-bold text-taupe">{notif.title}</h4>
+                                                        <span className="text-[10px] text-taupe-light/50 font-bold">
+                                                            {new Date(notif.createdAt).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-taupe-light leading-relaxed mb-3">{notif.body}</p>
+                                                    {notif.linkUrl && (
+                                                        <Link href={notif.linkUrl}>
+                                                            <span className="text-[10px] font-bold text-terracotta hover:underline">内容を確認する →</span>
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                                {!notif.isRead && <div className="w-2 h-2 rounded-full bg-terracotta mt-2" />}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            ) : (
+                                <>
+                                    {/* New Request Promotion Card */}
+                                    <div className="col-span-1 md:col-span-2 lg:col-span-3 bg-gradient-to-r from-terracotta/5 to-transparent p-6 rounded-[2rem] border border-terracotta/10 border-dashed mb-4 flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-taupe flex items-center gap-2">
+                                                <ShieldCheck size={16} className="text-terracotta" />
+                                                ナレッジが見つかりませんか？
+                                            </h3>
+                                            <p className="text-xs text-taupe-light mt-1">
+                                                依頼を作成するだけで <span className="font-bold text-terracotta">+30pt</span> 獲得。組織の知恵を借りましょう。
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => setIsCreateModalOpen(true)}
+                                            className="px-4 py-2 rounded-xl border-2 border-dashed border-terracotta/30 flex items-center gap-2 text-terracotta hover:bg-terracotta/5 transition-colors group text-xs font-bold bg-white/50"
+                                        >
+                                            <div className="bg-terracotta text-white p-0.5 rounded-md group-hover:scale-110 transition-transform">
+                                                <Plus size={14} />
+                                            </div>
+                                            <span>依頼を作成</span>
+                                        </button>
+                                    </div>
+
+                                    {filteredList.length === 0 ? (
+                                        <div className="col-span-full py-20 text-center text-taupe-light">
+                                            <p className="font-bold text-lg mb-2">
+                                                {activeTab === 'favorites' ? 'ブックマークしたナレッジ' : '条件に一致するナレッジはありません'}
+                                            </p>
+                                            <p className="text-xs">
+                                                {activeTab === 'favorites' ? '検索やWANTEDから、役立つ情報をお気に入りに登録できます。' : '平和な一日です。'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        filteredList.map((req) => {
+                                            const isMeToo = (req.structured_data?.me_too_users || []).includes(user.id);
+                                            const isFav = (req.structured_data?.favorites || []).includes(user.id);
+                                            const isSub = (req.structured_data?.subscribers || []).includes(user.id);
+                                            const viewCount = req.structured_data?.view_count || 0;
+                                            const isExpanded = expandedCardId === req.id;
+
+                                            return (
+                                                <PremiumCard key={req.id} className={`group hover:-translate-y-1 transition-all duration-300 ${req.structured_data?.priority === 'urgent' ? '!bg-red-50 !border-4 !border-red-500 shadow-none' : 'bg-white hover:shadow-premium'}`}>
+                                                    <div className="flex justify-between items-start mb-4 relative">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`p-2 rounded-lg ${req.structured_data?.priority === 'urgent' ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                                {req.structured_data?.priority === 'urgent' ? <Flame size={20} className="fill-red-600" /> : <HelpCircle size={20} />}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded w-fit ${req.structured_data?.priority === 'urgent' ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-500'}`}>
+                                                                    {req.structured_data?.priority === 'urgent' ? 'URGENT 🔥' : 'WANTED'}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 text-[9px] text-taupe-light ml-1 font-bold">
+                                                                    <Eye size={10} /> {viewCount}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-[10px] font-bold text-taupe-light block">獲得報酬</span>
+                                                            <span className="text-lg font-black text-terracotta tracking-tighter">
+                                                                {50 + (req.structured_data?.me_too_count || 0) * 10} <span className="text-xs">pt</span>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <h3 className="text-lg font-bold text-taupe mb-2 tracking-tight line-clamp-2 min-h-[3.5rem]">
+                                                        {req.title}
+                                                    </h3>
+                                                    <div className={`text-xs text-taupe-light leading-relaxed mb-6 transition-all duration-300 ${isExpanded ? '' : 'line-clamp-3 h-[4.5em]'}`}>
+                                                        {req.content}
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-auto">
+                                                        <div className="flex items-center gap-4 text-xs font-bold text-taupe-light">
+                                                            <button
+                                                                onClick={() => handleMeToo(req.id)}
+                                                                disabled={isMeToo}
+                                                                className={`flex items-center gap-1 transition-colors ${isMeToo ? 'text-terracotta cursor-default' : 'hover:text-terracotta'}`}
+                                                            >
+                                                                <Users size={14} className={isMeToo ? "fill-terracotta" : ""} />
+                                                                <span>{req.structured_data?.me_too_count || 0}</span>
+                                                                <span className="text-[9px] opacity-70">Me Too</span>
+                                                            </button>
+
+                                                            {/* Favorite */}
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleAction(req.id, 'favorite'); }}
+                                                                className={`p-2 rounded-full transition-colors ${isFav ? 'text-amber-400 bg-amber-50' : 'text-slate-400 hover:text-amber-400 hover:bg-amber-50'}`}
+                                                                title="お気に入り"
+                                                            >
+                                                                <Star size={16} className={isFav ? "fill-amber-400" : ""} />
+                                                            </button>
+
+                                                            {/* Subscribe */}
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleAction(req.id, 'subscribe'); }}
+                                                                className={`p-2 rounded-full transition-colors ${isSub ? 'text-blue-500 bg-blue-50' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50'}`}
+                                                                title="更新通知を受け取る"
+                                                            >
+                                                                <Bell size={16} className={isSub ? "fill-blue-500" : ""} />
+                                                            </button>
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                setSubmissionModalState({
+                                                                    isOpen: true,
+                                                                    requestId: req.id,
+                                                                    initialTitle: `【解決】${req.title}`,
+                                                                    initialContent: `解決策:\n\n---\n元のWANTED:\n${req.content}`
+                                                                });
+                                                            }}
+                                                            className="px-4 py-2 bg-taupe text-white text-xs font-bold rounded-lg hover:bg-taupe-dark transition-colors shadow-lg shadow-taupe/20"
+                                                        >
+                                                            解決する (作成)
+                                                        </button>
+                                                    </div>
+                                                </PremiumCard>
+                                            );
+                                        })
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <KnowledgeRequestModal
+                            isOpen={isCreateModalOpen}
+                            onClose={() => setIsCreateModalOpen(false)}
+                            messages={[]}
+                            onCreated={fetchWantedList}
+                            mode="request"
+                        />
+
+                        <KnowledgeRequestModal
+                            isOpen={submissionModalState.isOpen}
+                            onClose={() => setSubmissionModalState(prev => ({ ...prev, isOpen: false }))}
+                            messages={[]}
+                            initialTitle={submissionModalState.initialTitle}
+                            initialContent={submissionModalState.initialContent}
+                            mode="submit_knowledge"
+                            onCreated={(knowledgeId) => {
+                                if (knowledgeId && submissionModalState.requestId) {
+                                    handleResolve(submissionModalState.requestId, knowledgeId);
+                                }
+                                setSubmissionModalState(prev => ({ ...prev, isOpen: false }));
+                                fetchWantedList();
+                            }}
+                        />
+                    </div>
+                )}
+            </main >
+        </div >
+    );
 }

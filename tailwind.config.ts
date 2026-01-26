@@ -5,8 +5,24 @@ export default {
         './app/**/*.{js,ts,jsx,tsx,mdx}',
         './components/**/*.{js,ts,jsx,tsx,mdx}',
     ],
+    darkMode: 'class',
     theme: {
-        extend: {},
+        extend: {
+            colors: {
+                background: 'var(--background)',
+                foreground: 'var(--foreground)',
+                card: {
+                    DEFAULT: 'var(--card)',
+                    foreground: 'var(--card-foreground)',
+                },
+                muted: {
+                    DEFAULT: 'var(--muted)',
+                    foreground: 'var(--muted-foreground)',
+                },
+                border: 'var(--border)',
+                input: 'var(--input)',
+            }
+        },
     },
     plugins: [],
 } satisfies Config

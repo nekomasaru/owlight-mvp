@@ -87,9 +87,10 @@ Result:
 
 ---
 
-### Architecture Layer 2: AI Distillation (Gemini 2.5 Flash)
+### Architecture Layer 2: Knowledge Processing (Gemini 2.5 Flash)
 
 Once raw knowledge is captured, AI transforms it into structured, reusable assets.
+> **Note**: This process happens *before* storage (Knowledge Creation phase). For real-time retrieval (RAG), OWLight uses Vertex AI Search, not Gemini manual RAG. Gemini is used here strictly for formatting and structuring unstructured inputs into JSON.
 
 #### 2-1. Knowledge Synthesis
 

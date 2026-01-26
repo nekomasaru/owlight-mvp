@@ -17,8 +17,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
         <div className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
             {!isUser && (
                 <div className="flex-shrink-0 mr-3 mt-1">
-                    <div className="w-10 h-10 rounded-full bg-sage flex items-center justify-center overflow-hidden shadow-sm border-2 border-white">
-                        <img src="/Mr.OWL.jpg" alt="Mr.OWL" className="w-full h-full object-cover" />
+                    <div className="w-14 h-14 rounded-full bg-sage flex items-center justify-center overflow-hidden shadow-sm border-2 border-white">
+                        <img src="/Mr.OWL_Silhouette.png" alt="Mr.OWL" className="w-full h-full object-cover" />
                     </div>
                 </div>
             )}
